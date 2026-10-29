@@ -1,3 +1,10 @@
+### [2026-10-29 23:47] 편집기: 드래그 배치·회전·스냅·터치 UI
+- **기획:** DOM 과 분리된 Editor/GameSession 순수 로직 위에 포인터 입력과 하단 트레이 UI 를 연결해 한 손 터치로 배치·실행·리셋.
+- **TC:** 정상(스냅 배치, 오프셋 이동, 회전, 실행/리셋 보존) / 엣지(SAT 맞닿음·포함·대각 분리, 경계 밀어넣기, 수량 0·무제한, 트레이 드롭 삭제, 멀티터치).
+- **개발:** src/editor/geometry.ts, src/editor/placement.ts, src/editor/editor.ts, src/game/session.ts, src/game/app.ts, src/render/ui.ts, src/levels/practice.ts, tests/helpers/fakeBrowser.ts 외 9개 파일
+- **검증:** 158 passed, 0 failed (tsc 오류 0, 빌드 102.8 KB)
+- **비고:** 실제 브라우저가 없어 가짜 DOM 스모크 테스트로 대체 검증. 메뉴 버튼은 다음 작업에서 연결.
+
 ### [2026-10-29 23:39] matter-js 물리 월드와 MVP 부품 구현
 - **기획:** 부품 9종(공·쇠공·판자·도미노·시소·스프링·벽·바구니·종)을 정의/팩토리로 분리하고 고정 타임스텝 시뮬레이션으로 결정성을 보장.
 - **TC:** 정상(낙하·경사 굴절·도미노 전도·시소 발사·스프링 속도) / 엣지(결정성, 중복 id, 비유한 좌표, 긴 프레임 스텝 상한).

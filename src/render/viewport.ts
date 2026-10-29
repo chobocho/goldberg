@@ -48,3 +48,9 @@ export function computeViewport(screen: ScreenSize, worldWidth: number, worldHei
     offsetY: (height - worldHeight * scale) / 2,
   };
 }
+
+/** CSS 픽셀 좌표 → 논리 월드 좌표. 화면 크기가 0이면 역변환할 수 없으므로 null. */
+export function screenToWorld(viewport: Viewport, cssX: number, cssY: number): { x: number; y: number } | null {
+  if (!(viewport.scale > 0)) return null;
+  return { x: (cssX - viewport.offsetX) / viewport.scale, y: (cssY - viewport.offsetY) / viewport.scale };
+}

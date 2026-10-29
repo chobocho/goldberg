@@ -61,6 +61,9 @@ export function drawFieldBackground(ctx: CanvasRenderingContext2D): void {
     ctx.lineTo(FIELD.width, y);
   }
   ctx.stroke();
+  // 바닥선은 편집 모드(경계 바디 없음)에서도 보여야 하므로 배경에서 그린다
+  ctx.fillStyle = COLORS.ground;
+  ctx.fillRect(0, FIELD.height - 2, FIELD.width, 4);
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, body: Matter.Body): void {
@@ -163,13 +166,8 @@ function traceOutline(ctx: CanvasRenderingContext2D, body: Matter.Body): void {
 export function drawBodies(ctx: CanvasRenderingContext2D, bodies: readonly Matter.Body[], options: DrawOptions = {}): void {
   for (const body of bodies) {
     const tag = partTag(body);
-    if (!tag) {
-      if (body.label === 'boundary' && body.position.y > FIELD.height) {
-        ctx.fillStyle = COLORS.ground;
-        ctx.fillRect(0, FIELD.height - 2, FIELD.width, 4);
-      }
-      continue;
-    }
+    // 경계(바닥·벽) 바디는 배경에서 그리므로 건너뛴다
+    if (!tag) continue;
     const ghost = options.ghostIds?.has(tag.id) ?? false;
     ctx.globalAlpha = ghost ? 0.55 : 1;
     drawPartBody(ctx, body, tag.type, tag.role);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_DPR, computeViewport } from '../src/render/viewport';
+import { MAX_DPR, computeViewport, screenToWorld } from '../src/render/viewport';
 
 const W = 540;
 const H = 1080;
@@ -74,5 +74,24 @@ describe('computeViewport', () => {
     [Number.NaN, H],
   ])('0 이하/비유한 월드 크기(%s, %s)는 RangeError', (ww, wh) => {
     expect(() => computeViewport({ width: 100, height: 100, dpr: 1 }, ww, wh)).toThrow(RangeError);
+  });
+});
+
+describe('screenToWorld', () => {
+  it('레터박스 여백과 배율을 역변환한다', () => {
+    const v = computeViewport({ width: 412, height: 960, dpr: 2.625 }, W, H);
+    const world = screenToWorld(v, v.offsetX + 270 * v.scale, v.offsetY + 540 * v.scale)!;
+    expect(world.x).toBeCloseTo(270, 9);
+    expect(world.y).toBeCloseTo(540, 9);
+  });
+
+  it('여백 영역은 월드 밖 좌표(음수 등)로 그대로 변환한다', () => {
+    const v = computeViewport({ width: 412, height: 960, dpr: 1 }, W, H);
+    expect(screenToWorld(v, 0, 0)!.y).toBeLessThan(0);
+  });
+
+  it('배율 0(화면 크기 0)이면 null', () => {
+    const v = computeViewport({ width: 0, height: 0, dpr: 1 }, W, H);
+    expect(screenToWorld(v, 10, 10)).toBeNull();
   });
 });
