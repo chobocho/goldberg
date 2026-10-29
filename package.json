@@ -11,6 +11,7 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
+    "@types/matter-js": "^0.20.2",
     "@types/node": "^24.19.2",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.3",
@@ -18,5 +19,8 @@
   },
   "overrides": {
     "rollup": "npm:@rollup/wasm-node@^4"
+  },
+  "dependencies": {
+    "matter-js": "^0.20.0"
   }
 }
