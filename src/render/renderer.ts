@@ -1,5 +1,6 @@
 import type Matter from 'matter-js';
 import { FIELD } from '../config';
+import { FAN_HALF_WIDTH, FAN_RANGE } from '../core/simulation';
 import type { PartType } from '../parts/defs';
 import { partTag, type PartRole } from '../parts/factory';
 
@@ -30,6 +31,8 @@ const PART_STYLES: Record<PartType, PartStyle> = {
   wall: { fill: '#566173', stroke: '#2f3644' },
   basket: { fill: '#d9a441', stroke: '#7d5b1b' },
   bell: { fill: '#f2c14e', stroke: '#a8801f' },
+  conveyor: { fill: '#3a4152', stroke: '#1f2430' },
+  fan: { fill: '#7fb8e6', stroke: '#3a6d96' },
 };
 
 const BASE_STYLE: PartStyle = { fill: '#6b4a2b', stroke: '#3d2a18' };
@@ -141,12 +144,76 @@ function drawSpring(ctx: CanvasRenderingContext2D, body: Matter.Body, style: Par
   ctx.restore();
 }
 
+function drawConveyor(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartStyle): void {
+  tracePolygon(ctx, body);
+  ctx.fillStyle = style.fill;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = style.stroke;
+  ctx.stroke();
+  // 벨트 진행 방향(로컬 +x)을 쉐브론으로 표시하고, 양 끝에 롤러를 그린다
+  ctx.save();
+  ctx.translate(body.position.x, body.position.y);
+  ctx.rotate(body.angle);
+  ctx.strokeStyle = '#f2c14e';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let x = -54; x <= 54; x += 27) {
+    ctx.moveTo(x - 4, -4);
+    ctx.lineTo(x + 2, 0);
+    ctx.lineTo(x - 4, 4);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#8a93a8';
+  for (const x of [-72, 72]) {
+    ctx.beginPath();
+    ctx.arc(x, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawFan(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartStyle): void {
+  ctx.save();
+  ctx.translate(body.position.x, body.position.y);
+  ctx.rotate(body.angle);
+  // 바람 범위(로컬 +x 방향 직사각형)를 옅게 보여 준다
+  ctx.fillStyle = 'rgba(127,184,230,0.08)';
+  ctx.fillRect(22, -FAN_HALF_WIDTH, FAN_RANGE, FAN_HALF_WIDTH * 2);
+  ctx.strokeStyle = 'rgba(127,184,230,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (const y of [-18, 0, 18]) {
+    ctx.moveTo(34, y);
+    ctx.lineTo(70, y);
+  }
+  ctx.stroke();
+  // 본체와 날개
+  ctx.fillStyle = '#2f3644';
+  ctx.fillRect(-22, -22, 44, 44);
+  ctx.strokeStyle = style.stroke;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-22, -22, 44, 44);
+  ctx.fillStyle = style.fill;
+  for (let i = 0; i < 3; i++) {
+    ctx.save();
+    ctx.rotate((i * Math.PI * 2) / 3);
+    ctx.beginPath();
+    ctx.ellipse(0, -9, 5, 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawPartBody(ctx: CanvasRenderingContext2D, body: Matter.Body, type: PartType, role: PartRole): void {
   if (role === 'sensor') return;
   const style = role === 'base' ? BASE_STYLE : PART_STYLES[type];
   if (type === 'ball' || type === 'heavyBall') return drawBall(ctx, body, style);
   if (type === 'bell') return drawBell(ctx, body, style);
   if (type === 'spring') return drawSpring(ctx, body, style);
+  if (type === 'conveyor') return drawConveyor(ctx, body, style);
+  if (type === 'fan') return drawFan(ctx, body, style);
   tracePolygon(ctx, body);
   ctx.fillStyle = style.fill;
   ctx.fill();

@@ -1,6 +1,6 @@
 import Matter from 'matter-js';
 import { FIELD } from '../config';
-import type { PartSpec } from '../parts/defs';
+import { PART_DEFS, type PartSpec } from '../parts/defs';
 import { createPart, partTag } from '../parts/factory';
 
 const { Bodies, Body, Bounds, Composite, Engine, Events } = Matter;
@@ -9,6 +9,13 @@ const { Bodies, Body, Bounds, Composite, Engine, Events } = Matter;
 export const STEP_MS = 1000 / 60;
 /** 스프링 패드가 닿은 물체에 주는 속도 (px / 기준 스텝) */
 export const SPRING_SPEED = 18;
+/** 컨베이어 벨트 표면 속도 (px / 기준 스텝) */
+export const CONVEYOR_SPEED = 4;
+/** 선풍기 바람이 닿는 거리와 반폭 (px, 선풍기 로컬 좌표) */
+export const FAN_RANGE = 240;
+export const FAN_HALF_WIDTH = 36;
+// 송풍구 바로 앞의 바람 힘. 질량과 무관한 상수라 가벼운 공(중력 약 0.0008)은 크게, 쇠공은 거의 밀리지 않는다.
+const FAN_FORCE = 0.0015;
 
 const BOUNDARY_THICKNESS = 60;
 
@@ -49,6 +56,10 @@ export class Simulation {
   // 목표 판정용: 바구니 센서와 공 바디 목록 (생성 후 바뀌지 않으므로 미리 모아 둔다)
   private readonly basketSensors: { id: string; body: Matter.Body }[] = [];
   private readonly balls: Matter.Body[] = [];
+  private readonly fans: Matter.Body[] = [];
+  /** 바람·벨트의 영향을 받는 움직이는 바디 */
+  private readonly movers: Matter.Body[] = [];
+  private pendingBelts = new Map<Matter.Body, number>();
 
   constructor(parts: readonly PartSpec[]) {
     this.engine = Engine.create({ gravity: { x: 0, y: 1, scale: 0.001 } });
@@ -68,17 +79,70 @@ export class Simulation {
 
     Events.on(this.engine, 'collisionStart', (event) => {
       this.collectSpringLaunches(event.pairs);
+      this.collectBeltContacts(event.pairs);
       this.detectBellHits(event.pairs);
     });
+    // 벨트 위에 계속 머무는 물체는 collisionStart 가 다시 오지 않으므로 active 에서도 모은다
+    Events.on(this.engine, 'collisionActive', (event) => this.collectBeltContacts(event.pairs));
   }
 
   private indexGoalBodies(spec: PartSpec, bodies: Matter.Body[]): void {
+    if (spec.type === 'fan') this.fans.push(bodies[0]);
+    for (const body of bodies) if (!body.isStatic && !body.isSensor) this.movers.push(body);
     if (spec.type === 'basket' || spec.type === 'bell') this.goalIds.push(spec.id);
     if (spec.type === 'ball' || spec.type === 'heavyBall') this.balls.push(bodies[0]);
     if (spec.type === 'basket') {
       const sensor = bodies.find((b) => partTag(b)?.role === 'sensor');
       if (sensor) this.basketSensors.push({ id: spec.id, body: sensor });
     }
+  }
+
+  private collectBeltContacts(pairs: Matter.Pair[]): void {
+    for (const pair of pairs) {
+      for (const [belt, other] of [
+        [pair.bodyA, pair.bodyB],
+        [pair.bodyB, pair.bodyA],
+      ]) {
+        if (partTag(belt)?.type !== 'conveyor') continue;
+        const target = other.parent ?? other;
+        if (!target.isStatic && !target.isSensor) this.pendingBelts.set(target, belt.angle);
+      }
+    }
+  }
+
+  /**
+   * 선풍기 앞 직사각형 범위 안의 물체에 바람 힘을 준다. 가까울수록 세다(선형 감쇠).
+   * 벽에 가려지는 효과는 단순화를 위해 계산하지 않는다.
+   * O(선풍기 수 × 움직이는 바디 수) per step.
+   */
+  private applyWind(): void {
+    for (const fan of this.fans) {
+      const c = Math.cos(fan.angle);
+      const s = Math.sin(fan.angle);
+      const nozzle = PART_DEFS.fan.width / 2;
+      for (const body of this.movers) {
+        const dx = body.position.x - fan.position.x;
+        const dy = body.position.y - fan.position.y;
+        // 선풍기 로컬 좌표로 변환 (로컬 +x 가 바람 방향)
+        const lx = dx * c + dy * s;
+        const ly = -dx * s + dy * c;
+        if (lx < nozzle || lx > nozzle + FAN_RANGE || Math.abs(ly) > FAN_HALF_WIDTH) continue;
+        const strength = FAN_FORCE * (1 - (lx - nozzle) / FAN_RANGE);
+        Body.applyForce(body, body.position, { x: c * strength, y: s * strength });
+      }
+    }
+  }
+
+  /** 벨트 방향 속도 성분만 벨트 속도로 맞추고 수직 성분(낙하·튐)은 그대로 둔다 */
+  private applyBelts(): void {
+    for (const [body, angle] of this.pendingBelts) {
+      const dx = Math.cos(angle);
+      const dy = Math.sin(angle);
+      const along = body.velocity.x * dx + body.velocity.y * dy;
+      const delta = CONVEYOR_SPEED - along;
+      Body.setVelocity(body, { x: body.velocity.x + delta * dx, y: body.velocity.y + delta * dy });
+    }
+    this.pendingBelts.clear();
   }
 
   private achieve(id: string): void {
@@ -137,7 +201,10 @@ export class Simulation {
   }
 
   step(): void {
+    // 힘은 업데이트 직후 matter-js 가 초기화하므로 매 스텝 업데이트 전에 다시 건다
+    this.applyWind();
     Engine.update(this.engine, STEP_MS);
+    this.applyBelts();
     // 충돌 해소 단계가 속도를 덮어쓰지 않도록 발사는 업데이트가 끝난 뒤 적용한다
     for (const [body, velocity] of this.pendingLaunches) Body.setVelocity(body, velocity);
     this.pendingLaunches.clear();

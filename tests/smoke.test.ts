@@ -123,6 +123,24 @@ describe('스모크: 번들 실행', () => {
     expect(browser.errors).toEqual([]);
   });
 
+  it('샌드박스 트레이는 ▶ 로 다음 페이지 부품을 보여 준다', () => {
+    const browser = boot();
+    tapRect(browser, sandboxButton);
+    browser.frames(2);
+    const types = Object.keys(SANDBOX.inventory) as PartType[];
+    expect(browser.texts).not.toContain('선풍기 ∞');
+    tapRect(browser, playButton(buildLayout(types, 0), 'pageNext'));
+    browser.frames(2);
+    expect(browser.texts).toContain('선풍기 ∞');
+
+    // 다음 페이지의 부품도 끌어 놓을 수 있다
+    const fanSlot = buildLayout(types, 1).find((e) => e.kind === 'slot' && e.type === 'fan')!.rect;
+    browser.drag(center(fanSlot), { x: FIELD.x + 100, y: FIELD.y + 600 });
+    tapRect(browser, playButton(buildLayout(types, 1), 'run'));
+    browser.frames(30);
+    expect(browser.errors).toEqual([]);
+  });
+
   it('멀티터치 두 번째 손가락은 무시한다', () => {
     const browser = boot();
     tapRect(browser, sandboxButton);

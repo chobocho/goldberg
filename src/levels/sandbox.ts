@@ -1,7 +1,7 @@
 import type { LevelData } from './schema';
 
 // 자유 모드: 목표 없이 부품을 무제한으로 배치한다.
-// 슬롯 폭이 최소 터치 크기 아래로 줄지 않도록 8종만 제공한다 (바구니는 목표 전용이라 제외).
+// 바구니는 목표 전용이라 제외한다. 종류가 한 줄을 넘으면 트레이가 페이지로 나뉜다.
 export const SANDBOX: LevelData = {
   id: 'sandbox',
   name: '샌드박스',
@@ -16,5 +16,7 @@ export const SANDBOX: LevelData = {
     spring: Infinity,
     wall: Infinity,
     bell: Infinity,
+    conveyor: Infinity,
+    fan: Infinity,
   },
 };

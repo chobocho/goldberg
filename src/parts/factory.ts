@@ -85,6 +85,8 @@ export function createPart(spec: PartSpec): PartBodies {
     case 'plank':
     case 'spring':
     case 'wall':
+    case 'conveyor':
+    case 'fan':
       return {
         bodies: [tagged(Bodies.rectangle(x, y, def.width, def.height, { ...STATIC_OPTIONS, angle }), spec, 'main')],
         constraints: [],

@@ -3,8 +3,8 @@ import { FIELD, WORLD_HEIGHT, WORLD_WIDTH } from '../src/config';
 import { MIN_TOUCH_TARGET, buildMenuLayout, buildWinLayout, hitTestUi, type Rect } from '../src/render/ui';
 import { SANDBOX } from '../src/levels/sandbox';
 import { validateLevel } from '../src/levels/schema';
-import { buildLayout } from '../src/render/ui';
-import type { PartType } from '../src/parts/defs';
+import { buildLayout, pageCount } from '../src/render/ui';
+import { PART_TYPES, type PartType } from '../src/parts/defs';
 
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const insideWorld = (r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= WORLD_WIDTH && r.y + r.h <= WORLD_HEIGHT;
@@ -59,8 +59,16 @@ describe('SANDBOX', () => {
     for (const count of Object.values(SANDBOX.inventory)) expect(count).toBe(Infinity);
   });
 
-  it('슬롯이 최소 터치 크기를 지키는 개수만 제공한다', () => {
-    const slots = buildLayout(Object.keys(SANDBOX.inventory) as PartType[]).filter((e) => e.kind === 'slot');
-    for (const s of slots) expect(s.rect.w).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
+  it('모든 페이지의 슬롯이 최소 터치 크기를 지킨다', () => {
+    const types = Object.keys(SANDBOX.inventory) as PartType[];
+    for (let page = 0; page < pageCount(types.length); page++) {
+      const slots = buildLayout(types, page).filter((e) => e.kind === 'slot');
+      for (const s of slots) expect(s.rect.w).toBeGreaterThanOrEqual(MIN_TOUCH_TARGET);
+    }
+  });
+
+  it('바구니를 제외한 모든 부품을 제공한다', () => {
+    const offered = new Set(Object.keys(SANDBOX.inventory));
+    for (const type of PART_TYPES) expect(offered.has(type), type).toBe(type !== 'basket');
   });
 });

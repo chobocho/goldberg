@@ -13,6 +13,8 @@ export const PART_TYPES = [
   'wall',
   'basket',
   'bell',
+  'conveyor',
+  'fan',
 ] as const;
 
 export type PartType = (typeof PART_TYPES)[number];
@@ -147,6 +149,22 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     height: BASKET_HEIGHT,
     outline: rectOutline(BASKET_WIDTH, BASKET_HEIGHT),
     rotatable: false,
+    dynamic: false,
+  },
+  conveyor: {
+    label: '컨베이어',
+    width: 160,
+    height: 16,
+    outline: rectOutline(160, 16),
+    rotatable: true,
+    dynamic: false,
+  },
+  fan: {
+    label: '선풍기',
+    width: 44,
+    height: 44,
+    outline: rectOutline(44, 44),
+    rotatable: true,
     dynamic: false,
   },
   bell: {
