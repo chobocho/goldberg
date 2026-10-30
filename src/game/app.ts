@@ -6,8 +6,8 @@ import { LEVELS } from '../levels';
 import { SANDBOX } from '../levels/sandbox';
 import type { LevelData } from '../levels/schema';
 import { PART_DEFS, type PartSpec, type PartType, type Vec } from '../parts/defs';
-import { createPart } from '../parts/factory';
-import { COLORS, drawBodies, drawFieldBackground } from '../render/renderer';
+import { createPart, ropeLinesOf, type PartBodies } from '../parts/factory';
+import { COLORS, drawBodies, drawFieldBackground, drawRopeLines } from '../render/renderer';
 import {
   buildLayout,
   buildMenuLayout,
@@ -53,7 +53,7 @@ export class App {
   private activePointer: number | null = null;
   private lastTime: number | null = null;
   // 편집 모드 미리보기용 바디 캐시. 키는 부품 상태 문자열이라 위치/각도가 바뀐 부품만 다시 만든다.
-  private previewCache = new Map<string, Matter.Body[]>();
+  private previewCache = new Map<string, PartBodies>();
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -255,17 +255,19 @@ export class App {
 
   // ---- 렌더 ----
 
-  private previewBodies(parts: readonly PartSpec[]): Matter.Body[] {
-    const next = new Map<string, Matter.Body[]>();
+  private previewParts(parts: readonly PartSpec[]): { bodies: Matter.Body[]; constraints: Matter.Constraint[] } {
+    const next = new Map<string, PartBodies>();
     const bodies: Matter.Body[] = [];
+    const constraints: Matter.Constraint[] = [];
     for (const spec of parts) {
       const key = `${spec.id}|${spec.type}|${spec.x}|${spec.y}|${spec.angle}`;
-      const cached = this.previewCache.get(key) ?? createPart(spec).bodies;
+      const cached = this.previewCache.get(key) ?? createPart(spec);
       next.set(key, cached);
-      bodies.push(...cached);
+      bodies.push(...cached.bodies);
+      constraints.push(...cached.constraints);
     }
     this.previewCache = next;
-    return bodies;
+    return { bodies, constraints };
   }
 
   private draw(): void {
@@ -302,10 +304,13 @@ export class App {
     ctx.translate(FIELD.x, FIELD.y);
     drawFieldBackground(ctx);
     if (session.simulation) {
+      drawRopeLines(ctx, session.simulation.ropeLines());
       drawBodies(ctx, session.simulation.allBodies(), { achievedIds: session.simulation.achievedGoals });
     } else {
       const drag = editor.drag;
-      drawBodies(ctx, this.previewBodies(editor.displayParts()), {
+      const preview = this.previewParts(editor.displayParts());
+      drawRopeLines(ctx, ropeLinesOf(preview.constraints));
+      drawBodies(ctx, preview.bodies, {
         selectedId: editor.selectedId,
         ghostIds: drag ? new Set([drag.spec.id]) : undefined,
         invalidIds: drag && !drag.valid ? new Set([drag.spec.id]) : undefined,

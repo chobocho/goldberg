@@ -1,8 +1,8 @@
-import type Matter from 'matter-js';
 import { FIELD, TOP_BAR_HEIGHT, WORLD_HEIGHT, WORLD_WIDTH } from '../config';
 import { PART_DEFS, type PartType, type Vec } from '../parts/defs';
-import { createPart } from '../parts/factory';
-import { COLORS, drawBodies } from './renderer';
+import { polygonBounds } from '../editor/geometry';
+import { createPart, ropeLinesOf, type PartBodies } from '../parts/factory';
+import { COLORS, drawBodies, drawRopeLines } from './renderer';
 
 /**
  * 최소 터치 크기(월드 단위). 폴드 커버 화면 배율(약 0.76)에서 약 44 CSS px 로,
@@ -203,14 +203,14 @@ export function drawButton(
 }
 
 // 트레이 아이콘용 바디는 타입별로 한 번만 만든다 (매 프레임 생성 방지)
-const iconBodies = new Map<PartType, Matter.Body[]>();
-function iconFor(type: PartType): Matter.Body[] {
-  let bodies = iconBodies.get(type);
-  if (!bodies) {
-    bodies = createPart({ id: `icon-${type}`, type, x: 0, y: 0, angle: 0 }).bodies;
-    iconBodies.set(type, bodies);
+const iconParts = new Map<PartType, PartBodies>();
+function iconFor(type: PartType): PartBodies {
+  let parts = iconParts.get(type);
+  if (!parts) {
+    parts = createPart({ id: `icon-${type}`, type, x: 0, y: 0, angle: 0 });
+    iconParts.set(type, parts);
   }
-  return bodies;
+  return parts;
 }
 
 function drawSlot(ctx: CanvasRenderingContext2D, type: PartType, rect: Rect, remaining: number, enabled: boolean): void {
@@ -222,10 +222,18 @@ function drawSlot(ctx: CanvasRenderingContext2D, type: PartType, rect: Rect, rem
   const def = PART_DEFS[type];
   const iconArea = { w: rect.w - 14, h: rect.h - 30 };
   const scale = Math.min(1, iconArea.w / def.width, iconArea.h / def.height);
+  // 로프처럼 원점(고정점)이 외곽선 중심이 아닌 부품도 슬롯 가운데에 오도록 외곽선 중심으로 맞춘다
+  const b = polygonBounds(def.outline);
+  const icon = iconFor(type);
   ctx.save();
+  // 선풍기 바람 범위처럼 아이콘 밖으로 뻗는 장식은 슬롯 안으로 자른다
+  roundRect(ctx, rect, 12);
+  ctx.clip();
   ctx.translate(rect.x + rect.w / 2, rect.y + 6 + iconArea.h / 2);
   ctx.scale(scale, scale);
-  drawBodies(ctx, iconFor(type));
+  ctx.translate(-(b.minX + b.maxX) / 2, -(b.minY + b.maxY) / 2);
+  drawRopeLines(ctx, ropeLinesOf(icon.constraints));
+  drawBodies(ctx, icon.bodies);
   ctx.restore();
 
   ctx.globalAlpha = enabled && remaining > 0 ? 1 : 0.35;

@@ -1,9 +1,9 @@
 import Matter from 'matter-js';
 import { FIELD } from '../config';
 import { PART_DEFS, type PartSpec } from '../parts/defs';
-import { createPart, partTag } from '../parts/factory';
+import { constraintEnds, createPart, partTag, ropeLinesOf, type Line } from '../parts/factory';
 
-const { Bodies, Body, Bounds, Composite, Engine, Events } = Matter;
+const { Bodies, Body, Bounds, Composite, Engine, Events, Vector } = Matter;
 
 // 결정성을 위해 시뮬레이션은 항상 고정 간격으로만 진행한다 (렌더 프레임 간격과 분리)
 export const STEP_MS = 1000 / 60;
@@ -16,6 +16,10 @@ export const FAN_RANGE = 240;
 export const FAN_HALF_WIDTH = 36;
 // 송풍구 바로 앞의 바람 힘. 질량과 무관한 상수라 가벼운 공(중력 약 0.0008)은 크게, 쇠공은 거의 밀리지 않는다.
 const FAN_FORCE = 0.0015;
+/** 가위가 작동했을 때 로프를 자르고 풍선을 터뜨리는 반경 (px) */
+export const SCISSORS_REACH = 60;
+// 풍선 부력 = 중력의 배수. 1 을 넘는 만큼 떠오른다.
+const BALLOON_LIFT = 1.5;
 
 const BOUNDARY_THICKNESS = 60;
 
@@ -50,6 +54,8 @@ export class Simulation {
   readonly goalIds: string[] = [];
   readonly achievedGoals = new Set<string>();
   solvedAtStep: number | null = null;
+  readonly removedParts = new Set<string>();
+  readonly snippedScissors = new Set<string>();
   private readonly partBodies = new Map<string, Matter.Body[]>();
   private readonly order: string[] = [];
   private pendingLaunches = new Map<Matter.Body, Matter.Vector>();
@@ -60,12 +66,19 @@ export class Simulation {
   /** 바람·벨트의 영향을 받는 움직이는 바디 */
   private readonly movers: Matter.Body[] = [];
   private pendingBelts = new Map<Matter.Body, number>();
+  private readonly balloons = new Map<string, Matter.Body>();
+  private readonly ropes = new Map<string, Matter.Constraint[]>();
+  private readonly scissors = new Map<string, Matter.Body>();
+  private pendingSnips = new Set<string>();
+  private pendingPops = new Set<string>();
 
   constructor(parts: readonly PartSpec[]) {
     this.engine = Engine.create({ gravity: { x: 0, y: 1, scale: 0.001 } });
     // 도미노처럼 맞닿은 물체가 많은 장면에서 관통·떨림을 줄이기 위해 반복 횟수를 기본값보다 높인다
     this.engine.positionIterations = 10;
     this.engine.velocityIterations = 8;
+    // 로프처럼 제약이 사슬로 이어지면 무거운 추에 줄이 늘어난다. 실측: 반복 4회 13.5px → 8회 5.7px
+    this.engine.constraintIterations = 8;
     this.addBoundaries();
 
     for (const spec of parts) {
@@ -75,12 +88,14 @@ export class Simulation {
       this.order.push(spec.id);
       Composite.add(this.engine.world, [...bodies, ...constraints]);
       this.indexGoalBodies(spec, bodies);
+      this.indexMechanisms(spec, bodies, constraints);
     }
 
     Events.on(this.engine, 'collisionStart', (event) => {
       this.collectSpringLaunches(event.pairs);
       this.collectBeltContacts(event.pairs);
       this.detectBellHits(event.pairs);
+      this.detectScissorsHits(event.pairs);
     });
     // 벨트 위에 계속 머무는 물체는 collisionStart 가 다시 오지 않으므로 active 에서도 모은다
     Events.on(this.engine, 'collisionActive', (event) => this.collectBeltContacts(event.pairs));
@@ -94,6 +109,85 @@ export class Simulation {
     if (spec.type === 'basket') {
       const sensor = bodies.find((b) => partTag(b)?.role === 'sensor');
       if (sensor) this.basketSensors.push({ id: spec.id, body: sensor });
+    }
+  }
+
+  private indexMechanisms(spec: PartSpec, bodies: Matter.Body[], constraints: Matter.Constraint[]): void {
+    if (spec.type === 'balloon') this.balloons.set(spec.id, bodies[0]);
+    if (spec.type === 'scissors') this.scissors.set(spec.id, bodies[0]);
+    if (spec.type === 'rope') this.ropes.set(spec.id, [...constraints]);
+  }
+
+  /** 움직이는 물체가 가위에 닿으면 작동 예약. 풍선이 직접 닿으면 그 풍선도 터뜨린다. */
+  private detectScissorsHits(pairs: Matter.Pair[]): void {
+    for (const pair of pairs) {
+      for (const [blade, other] of [
+        [pair.bodyA, pair.bodyB],
+        [pair.bodyB, pair.bodyA],
+      ]) {
+        const tag = partTag(blade);
+        if (tag?.type !== 'scissors') continue;
+        const target = other.parent ?? other;
+        if (target.isStatic || target.isSensor) continue;
+        this.pendingSnips.add(tag.id);
+        const otherTag = partTag(target);
+        if (otherTag?.type === 'balloon') this.pendingPops.add(otherTag.id);
+      }
+    }
+  }
+
+  // 충돌 이벤트 도중에 월드를 바꾸면 matter-js 내부 순회가 깨질 수 있어, 제거는 업데이트 뒤에 몰아서 한다
+  private processSnips(): void {
+    for (const id of this.pendingSnips) {
+      if (this.snippedScissors.has(id)) continue;
+      const blade = this.scissors.get(id)!;
+      this.snippedScissors.add(id);
+      blade.plugin = { ...blade.plugin, snipped: true };
+      // 로프마다 가위에 가장 가까운 연결 하나만 끊는다. O(로프 수 × 마디 수).
+      for (const constraints of this.ropes.values()) {
+        let nearest: Matter.Constraint | null = null;
+        let best = SCISSORS_REACH;
+        for (const c of constraints) {
+          const { a, b } = constraintEnds(c);
+          const mid = Vector.mult(Vector.add(a, b), 0.5);
+          const d = Vector.magnitude(Vector.sub(mid, blade.position));
+          if (d <= best) {
+            best = d;
+            nearest = c;
+          }
+        }
+        if (nearest) {
+          Composite.remove(this.engine.world, nearest);
+          constraints.splice(constraints.indexOf(nearest), 1);
+        }
+      }
+      for (const [balloonId, balloon] of this.balloons) {
+        const d = Vector.magnitude(Vector.sub(balloon.position, blade.position));
+        if (d <= SCISSORS_REACH + (balloon.circleRadius ?? 0)) this.pendingPops.add(balloonId);
+      }
+    }
+    this.pendingSnips.clear();
+
+    for (const id of this.pendingPops) this.removePart(id);
+    this.pendingPops.clear();
+  }
+
+  private removePart(id: string): void {
+    if (this.removedParts.has(id)) return;
+    const bodies = this.bodiesOf(id);
+    Composite.remove(this.engine.world, bodies);
+    this.removedParts.add(id);
+    this.balloons.delete(id);
+    const gone = new Set(bodies);
+    for (const list of [this.movers, this.balls]) {
+      for (let i = list.length - 1; i >= 0; i--) if (gone.has(list[i])) list.splice(i, 1);
+    }
+  }
+
+  private applyBuoyancy(): void {
+    const g = this.engine.gravity;
+    for (const balloon of this.balloons.values()) {
+      Body.applyForce(balloon, balloon.position, { x: 0, y: -balloon.mass * g.y * g.scale * BALLOON_LIFT });
     }
   }
 
@@ -203,8 +297,10 @@ export class Simulation {
   step(): void {
     // 힘은 업데이트 직후 matter-js 가 초기화하므로 매 스텝 업데이트 전에 다시 건다
     this.applyWind();
+    this.applyBuoyancy();
     Engine.update(this.engine, STEP_MS);
     this.applyBelts();
+    this.processSnips();
     // 충돌 해소 단계가 속도를 덮어쓰지 않도록 발사는 업데이트가 끝난 뒤 적용한다
     for (const [body, velocity] of this.pendingLaunches) Body.setVelocity(body, velocity);
     this.pendingLaunches.clear();
@@ -222,6 +318,11 @@ export class Simulation {
   }
 
   /** 목표가 하나 이상 있고 모두 달성했는지. 목표가 없는 샌드박스는 항상 false. */
+  /** 아직 끊기지 않은 로프 연결의 양 끝점 (렌더링용) */
+  ropeLines(): Line[] {
+    return [...this.ropes.values()].flatMap((constraints) => ropeLinesOf(constraints));
+  }
+
   isSolved(): boolean {
     return this.solvedAtStep !== null;
   }

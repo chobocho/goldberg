@@ -15,6 +15,9 @@ export const PART_TYPES = [
   'bell',
   'conveyor',
   'fan',
+  'balloon',
+  'rope',
+  'scissors',
 ] as const;
 
 export type PartType = (typeof PART_TYPES)[number];
@@ -69,6 +72,11 @@ export const SEESAW_LENGTH = 220;
 export const SEESAW_THICKNESS = 14;
 export const SEESAW_BASE_WIDTH = 50;
 export const SEESAW_BASE_HEIGHT = 40;
+
+// 로프 치수: 고정점(spec 위치)에서 추 중심까지의 길이와 중간 마디 수
+export const ROPE_LENGTH = 120;
+export const ROPE_SEGMENTS = 6;
+const ROPE_BOB_RADIUS = 14;
 
 // 바구니 치수: 바깥 크기와 벽 두께. 내부 센서는 벽 안쪽 아랫부분을 차지한다.
 export const BASKET_WIDTH = 96;
@@ -164,6 +172,33 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     width: 44,
     height: 44,
     outline: rectOutline(44, 44),
+    rotatable: true,
+    dynamic: false,
+  },
+  balloon: {
+    label: '풍선',
+    width: 40,
+    height: 40,
+    radius: 20,
+    outline: circleOutline(20),
+    rotatable: false,
+    dynamic: true,
+  },
+  // 고정점이 spec 위치, 추가 그 아래 ROPE_LENGTH 에 매달린다. 외곽선은 고정점~추 전체를 덮는다.
+  rope: {
+    label: '로프',
+    width: 32,
+    height: ROPE_LENGTH + ROPE_BOB_RADIUS + 6,
+    radius: ROPE_BOB_RADIUS,
+    outline: rectOutline(32, 0).map((p, i) => ({ x: p.x, y: i < 2 ? -6 : ROPE_LENGTH + ROPE_BOB_RADIUS })),
+    rotatable: false,
+    dynamic: true,
+  },
+  scissors: {
+    label: '가위',
+    width: 56,
+    height: 24,
+    outline: rectOutline(56, 24),
     rotatable: true,
     dynamic: false,
   },

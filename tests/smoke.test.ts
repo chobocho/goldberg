@@ -141,6 +141,32 @@ describe('스모크: 번들 실행', () => {
     expect(browser.errors).toEqual([]);
   });
 
+  it('샌드박스에서 로프·풍선·가위를 배치하고 실행해도 예외가 없다', () => {
+    const browser = boot();
+    tapRect(browser, sandboxButton);
+    const types = Object.keys(SANDBOX.inventory) as PartType[];
+    const slotRect = (type: PartType, page: number) =>
+      buildLayout(types, page).find((e) => e.kind === 'slot' && e.type === type)!.rect;
+    const pageOf = (type: PartType) => Math.floor(types.indexOf(type) / 6);
+    let page = 0;
+    const place = (type: PartType, x: number, y: number) => {
+      while (page !== pageOf(type)) {
+        tapRect(browser, playButton(buildLayout(types, page), 'pageNext'));
+        page = (page + 1) % 3;
+      }
+      browser.drag(center(slotRect(type, page)), { x: FIELD.x + x, y: FIELD.y + y });
+    };
+    place('rope', 270, 260);
+    place('balloon', 420, 700);
+    place('scissors', 330, 320);
+    place('ball', 330, 160);
+    browser.frames(2);
+    tapRect(browser, playButton(buildLayout(types, page), 'run'));
+    browser.frames(240);
+    expect(browser.texts).toContain('■ 리셋');
+    expect(browser.errors).toEqual([]);
+  });
+
   it('멀티터치 두 번째 손가락은 무시한다', () => {
     const browser = boot();
     tapRect(browser, sandboxButton);

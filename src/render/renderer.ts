@@ -2,7 +2,7 @@ import type Matter from 'matter-js';
 import { FIELD } from '../config';
 import { FAN_HALF_WIDTH, FAN_RANGE } from '../core/simulation';
 import type { PartType } from '../parts/defs';
-import { partTag, type PartRole } from '../parts/factory';
+import { partTag, type Line, type PartRole } from '../parts/factory';
 
 export const COLORS = {
   background: '#11141c',
@@ -33,6 +33,9 @@ const PART_STYLES: Record<PartType, PartStyle> = {
   bell: { fill: '#f2c14e', stroke: '#a8801f' },
   conveyor: { fill: '#3a4152', stroke: '#1f2430' },
   fan: { fill: '#7fb8e6', stroke: '#3a6d96' },
+  balloon: { fill: '#e8608f', stroke: '#9c2f57' },
+  rope: { fill: '#5b4636', stroke: '#2e231b' },
+  scissors: { fill: '#c9ced8', stroke: '#5a6170' },
 };
 
 const BASE_STYLE: PartStyle = { fill: '#6b4a2b', stroke: '#3d2a18' };
@@ -206,10 +209,93 @@ function drawFan(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartSt
   ctx.restore();
 }
 
+function drawBalloon(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartStyle): void {
+  const r = body.circleRadius ?? 20;
+  const { x, y } = body.position;
+  // 아래로 늘어진 끈
+  ctx.beginPath();
+  ctx.moveTo(x, y + r);
+  ctx.quadraticCurveTo(x + 6, y + r + 12, x - 2, y + r + 24);
+  ctx.strokeStyle = '#c9ced8';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 0.9, r, 0, 0, Math.PI * 2);
+  ctx.fillStyle = style.fill;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = style.stroke;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.35, y - r * 0.4, r * 0.18, r * 0.3, -0.5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fill();
+}
+
+function drawScissors(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartStyle): void {
+  // 작동 전에는 날이 벌어져 있고, 작동하면 닫힌다
+  const open = body.plugin?.snipped ? 0.08 : 0.42;
+  ctx.save();
+  ctx.translate(body.position.x, body.position.y);
+  ctx.rotate(body.angle);
+  for (const dir of [-1, 1]) {
+    ctx.save();
+    ctx.rotate(dir * open);
+    ctx.beginPath();
+    ctx.moveTo(0, -3);
+    ctx.lineTo(28, 0);
+    ctx.lineTo(0, 3);
+    ctx.closePath();
+    ctx.fillStyle = style.fill;
+    ctx.fill();
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // 손잡이 고리
+    ctx.beginPath();
+    ctx.arc(-16, dir * 5, 8, 0, Math.PI * 2);
+    ctx.strokeStyle = '#e85d4a';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = style.stroke;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawRopeAnchor(ctx: CanvasRenderingContext2D, body: Matter.Body): void {
+  const { x, y } = body.position;
+  ctx.fillStyle = '#566173';
+  ctx.fillRect(x - 12, y - 6, 24, 6);
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#c9ced8';
+  ctx.fill();
+}
+
+export function drawRopeLines(ctx: CanvasRenderingContext2D, lines: readonly Line[]): void {
+  ctx.strokeStyle = '#b08a5a';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const { a, b } of lines) {
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
 function drawPartBody(ctx: CanvasRenderingContext2D, body: Matter.Body, type: PartType, role: PartRole): void {
-  if (role === 'sensor') return;
+  if (role === 'sensor' || role === 'segment') return;
+  if (role === 'anchor') return drawRopeAnchor(ctx, body);
   const style = role === 'base' ? BASE_STYLE : PART_STYLES[type];
-  if (type === 'ball' || type === 'heavyBall') return drawBall(ctx, body, style);
+  if (type === 'ball' || type === 'heavyBall' || type === 'rope') return drawBall(ctx, body, style);
+  if (type === 'balloon') return drawBalloon(ctx, body, style);
+  if (type === 'scissors') return drawScissors(ctx, body, style);
   if (type === 'bell') return drawBell(ctx, body, style);
   if (type === 'spring') return drawSpring(ctx, body, style);
   if (type === 'conveyor') return drawConveyor(ctx, body, style);
@@ -255,7 +341,7 @@ export function drawBodies(ctx: CanvasRenderingContext2D, bodies: readonly Matte
       ctx.stroke();
     }
 
-    if (tag.role === 'sensor') continue;
+    if (tag.role === 'sensor' || tag.role === 'segment' || tag.role === 'anchor') continue;
     const invalid = options.invalidIds?.has(tag.id);
     const selected = options.selectedId === tag.id;
     if (invalid || selected) {
