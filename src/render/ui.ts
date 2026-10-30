@@ -26,7 +26,9 @@ export type ButtonId =
   | 'clear'
   | 'winRetry'
   | 'winNext'
-  | 'winMenu';
+  | 'winMenu'
+  | 'pagePrev'
+  | 'pageNext';
 
 export type UiElement = { kind: 'slot'; type: PartType; rect: Rect } | { kind: 'button'; id: ButtonId; rect: Rect };
 export type MenuElement = { kind: 'level'; index: number; rect: Rect } | { kind: 'sandbox'; rect: Rect };
@@ -77,22 +79,59 @@ const TRAY_TOP = FIELD.y + FIELD.height;
 const SLOT_ROW = { y: TRAY_TOP + 8, h: 76 };
 const BUTTON_ROW = { y: TRAY_TOP + 92, h: 64 };
 
-export function buildLayout(slotTypes: readonly PartType[]): UiElement[] {
+/** 한 줄에 최소 터치 크기로 담을 수 있는 최대 슬롯 수. 이보다 많으면 페이지로 나눈다. */
+export const SINGLE_PAGE_MAX = 8;
+/** 페이지 모드에서는 양 끝 ◀ ▶ 버튼 자리를 빼고 남는 폭에 들어가는 슬롯 수 */
+export const SLOTS_PER_PAGE = 6;
+const PAGER_WIDTH = MIN_TOUCH_TARGET;
+
+export function pageCount(n: number): number {
+  return n <= SINGLE_PAGE_MAX ? 1 : Math.ceil(n / SLOTS_PER_PAGE);
+}
+
+function clampPage(page: number, count: number): number {
+  if (!Number.isFinite(page)) return 0;
+  return Math.max(0, Math.min(count - 1, Math.trunc(page)));
+}
+
+/** 슬롯을 [left, right) 구간에 가운데 정렬로 배치한다 */
+function placeSlots(elements: UiElement[], types: readonly PartType[], left: number, right: number): void {
+  const n = types.length;
+  if (n === 0) return;
+  const avail = right - left;
+  const w = Math.min(SLOT_MAX_WIDTH, (avail - SLOT_GAP * (n - 1)) / n);
+  const total = w * n + SLOT_GAP * (n - 1);
+  const startX = left + (avail - total) / 2;
+  types.forEach((type, i) => {
+    elements.push({ kind: 'slot', type, rect: { x: startX + i * (w + SLOT_GAP), y: SLOT_ROW.y, w, h: SLOT_ROW.h } });
+  });
+}
+
+export function buildLayout(slotTypes: readonly PartType[], page = 0): UiElement[] {
   const elements: UiElement[] = [
     { kind: 'button', id: 'menu', rect: { x: MARGIN, y: 7, w: 58, h: 58 } },
     { kind: 'button', id: 'run', rect: { x: WORLD_WIDTH - MARGIN - 150, y: 7, w: 150, h: 58 } },
   ];
 
-  // 슬롯은 가운데 정렬. 종류가 많아지면 폭을 줄여 한 줄에 담는다.
-  const n = slotTypes.length;
-  if (n > 0) {
-    const avail = WORLD_WIDTH - MARGIN * 2;
-    const w = Math.min(SLOT_MAX_WIDTH, (avail - SLOT_GAP * (n - 1)) / n);
-    const total = w * n + SLOT_GAP * (n - 1);
-    const startX = (WORLD_WIDTH - total) / 2;
-    slotTypes.forEach((type, i) => {
-      elements.push({ kind: 'slot', type, rect: { x: startX + i * (w + SLOT_GAP), y: SLOT_ROW.y, w, h: SLOT_ROW.h } });
-    });
+  const pages = pageCount(slotTypes.length);
+  if (pages === 1) {
+    placeSlots(elements, slotTypes, MARGIN, WORLD_WIDTH - MARGIN);
+  } else {
+    const p = clampPage(page, pages);
+    elements.push(
+      { kind: 'button', id: 'pagePrev', rect: { x: MARGIN, y: SLOT_ROW.y, w: PAGER_WIDTH, h: SLOT_ROW.h } },
+      {
+        kind: 'button',
+        id: 'pageNext',
+        rect: { x: WORLD_WIDTH - MARGIN - PAGER_WIDTH, y: SLOT_ROW.y, w: PAGER_WIDTH, h: SLOT_ROW.h },
+      },
+    );
+    placeSlots(
+      elements,
+      slotTypes.slice(p * SLOTS_PER_PAGE, (p + 1) * SLOTS_PER_PAGE),
+      MARGIN + PAGER_WIDTH + SLOT_GAP,
+      WORLD_WIDTH - MARGIN - PAGER_WIDTH - SLOT_GAP,
+    );
   }
 
   const buttons: ButtonId[] = ['rotateLeft', 'rotateRight', 'delete', 'clear'];
@@ -130,6 +169,8 @@ const BUTTON_LABELS: Record<Exclude<ButtonId, 'run'>, string> = {
   winRetry: '↺ 다시',
   winNext: '다음 ▶',
   winMenu: '☰ 메뉴',
+  pagePrev: '◀',
+  pageNext: '▶',
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number): void {
@@ -233,6 +274,10 @@ export function drawUi(ctx: CanvasRenderingContext2D, layout: readonly UiElement
         break;
       case 'clear':
         drawButton(ctx, e.rect, BUTTON_LABELS.clear, { enabled: editable && state.hasPlaced, fontSize: 20 });
+        break;
+      case 'pagePrev':
+      case 'pageNext':
+        drawButton(ctx, e.rect, BUTTON_LABELS[e.id], { enabled: editable, fontSize: 24 });
         break;
       default:
         break;

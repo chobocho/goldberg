@@ -17,6 +17,7 @@ import {
   drawUi,
   drawWinOverlay,
   hitTestUi,
+  pageCount,
   type ButtonId,
   type UiElement,
 } from '../render/ui';
@@ -32,6 +33,9 @@ interface Play {
   /** LEVELS 안의 순번. 샌드박스는 null */
   index: number | null;
   session: GameSession;
+  slotTypes: PartType[];
+  /** 트레이 페이지 (부품 종류가 많을 때만 의미가 있다) */
+  page: number;
   layout: UiElement[];
   winLayout: UiElement[];
 }
@@ -88,7 +92,9 @@ export class App {
       level,
       index,
       session: new GameSession(new Editor(level.fixed, level.inventory)),
-      layout: buildLayout(types),
+      slotTypes: types,
+      page: 0,
+      layout: buildLayout(types, 0),
       winLayout: buildWinLayout(index !== null && index + 1 < LEVELS.length),
     };
     this.previewCache.clear();
@@ -215,6 +221,15 @@ export class App {
         if (session.mode === 'edit') session.run();
         else session.reset();
         return;
+      case 'pagePrev':
+      case 'pageNext': {
+        if (session.mode !== 'edit') return;
+        // 양 끝에서 반대쪽으로 넘어가도록 순환시킨다 (버튼이 비활성화되는 상태를 없앤다)
+        const count = pageCount(play.slotTypes.length);
+        play.page = (play.page + (id === 'pageNext' ? 1 : -1) + count) % count;
+        play.layout = buildLayout(play.slotTypes, play.page);
+        return;
+      }
     }
     if (session.mode !== 'edit') return;
     switch (id) {
