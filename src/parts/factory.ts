@@ -4,6 +4,10 @@ import {
   BASKET_WALL,
   BASKET_WIDTH,
   PART_DEFS,
+  PULLEY_DROP,
+  PULLEY_PLATFORM,
+  PULLEY_SPAN,
+  PULLEY_WHEEL_RADIUS,
   ROPE_LENGTH,
   ROPE_SEGMENTS,
   SEESAW_BASE_HEIGHT,
@@ -16,7 +20,7 @@ import {
 
 const { Bodies, Constraint, Vector } = Matter;
 
-export type PartRole = 'main' | 'base' | 'wall' | 'sensor' | 'anchor' | 'segment';
+export type PartRole = 'main' | 'base' | 'wall' | 'sensor' | 'anchor' | 'segment' | 'platform';
 
 /** body.plugin.part 에 저장되는 태그. 렌더러·목표 판정이 바디에서 부품을 역추적할 때 쓴다. */
 export interface PartTag {
@@ -89,6 +93,22 @@ export function createPart(spec: PartSpec): PartBodies {
         ],
         constraints: [],
       };
+
+    case 'pulley': {
+      const wheel = tagged(Bodies.circle(x, y, PULLEY_WHEEL_RADIUS, STATIC_OPTIONS), spec, 'base');
+      // 받침은 회전하지 않도록 관성을 무한대로 두고, 상하 운동은 시뮬레이션의 도르래 투영이 맡는다
+      const platform = (px: number, role: PartRole) =>
+        tagged(
+          Bodies.rectangle(px, y + PULLEY_DROP, PULLEY_PLATFORM.width, PULLEY_PLATFORM.height, {
+            density: 0.002,
+            friction: 0.6,
+            inertia: Infinity,
+          }),
+          spec,
+          role,
+        );
+      return { bodies: [wheel, platform(x - PULLEY_SPAN, 'main'), platform(x + PULLEY_SPAN, 'platform')], constraints: [] };
+    }
 
     case 'balloon':
       return { bodies: [tagged(Bodies.circle(x, y, def.radius!, BALLOON_OPTIONS), spec, 'main')], constraints: [] };

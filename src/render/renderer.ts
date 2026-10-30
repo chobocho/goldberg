@@ -36,6 +36,7 @@ const PART_STYLES: Record<PartType, PartStyle> = {
   balloon: { fill: '#e8608f', stroke: '#9c2f57' },
   rope: { fill: '#5b4636', stroke: '#2e231b' },
   scissors: { fill: '#c9ced8', stroke: '#5a6170' },
+  pulley: { fill: '#b07a45', stroke: '#6e4a26' },
 };
 
 const BASE_STYLE: PartStyle = { fill: '#6b4a2b', stroke: '#3d2a18' };
@@ -276,6 +277,50 @@ function drawRopeAnchor(ctx: CanvasRenderingContext2D, body: Matter.Body): void 
   ctx.fill();
 }
 
+/** 도르래 줄: 바퀴 좌우 가장자리에서 각 받침 윗면 가운데까지 */
+function drawPulleyRopes(ctx: CanvasRenderingContext2D, bodies: readonly Matter.Body[]): void {
+  const groups = new Map<string, { wheel?: Matter.Body; left?: Matter.Body; right?: Matter.Body }>();
+  for (const body of bodies) {
+    const tag = partTag(body);
+    if (tag?.type !== 'pulley') continue;
+    const g = groups.get(tag.id) ?? {};
+    if (tag.role === 'base') g.wheel = body;
+    else if (tag.role === 'main') g.left = body;
+    else if (tag.role === 'platform') g.right = body;
+    groups.set(tag.id, g);
+  }
+  const lines: Line[] = [];
+  for (const { wheel, left, right } of groups.values()) {
+    if (!wheel || !left || !right) continue;
+    const r = wheel.circleRadius ?? 16;
+    const top = (b: Matter.Body) => ({ x: b.position.x, y: b.bounds.min.y });
+    lines.push({ a: { x: wheel.position.x - r, y: wheel.position.y }, b: top(left) });
+    lines.push({ a: { x: wheel.position.x + r, y: wheel.position.y }, b: top(right) });
+  }
+  if (lines.length > 0) drawRopeLines(ctx, lines);
+}
+
+function drawPulleyWheel(ctx: CanvasRenderingContext2D, body: Matter.Body, style: PartStyle): void {
+  const r = body.circleRadius ?? 16;
+  const { x, y } = body.position;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#566173';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = style.fill;
+  ctx.stroke();
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = (i * Math.PI) / 3;
+    ctx.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r);
+    ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#c9ced8';
+  ctx.stroke();
+}
+
 export function drawRopeLines(ctx: CanvasRenderingContext2D, lines: readonly Line[]): void {
   ctx.strokeStyle = '#b08a5a';
   ctx.lineWidth = 2.5;
@@ -292,6 +337,7 @@ export function drawRopeLines(ctx: CanvasRenderingContext2D, lines: readonly Lin
 function drawPartBody(ctx: CanvasRenderingContext2D, body: Matter.Body, type: PartType, role: PartRole): void {
   if (role === 'sensor' || role === 'segment') return;
   if (role === 'anchor') return drawRopeAnchor(ctx, body);
+  if (type === 'pulley' && role === 'base') return drawPulleyWheel(ctx, body, PART_STYLES.pulley);
   const style = role === 'base' ? BASE_STYLE : PART_STYLES[type];
   if (type === 'ball' || type === 'heavyBall' || type === 'rope') return drawBall(ctx, body, style);
   if (type === 'balloon') return drawBalloon(ctx, body, style);
@@ -319,6 +365,7 @@ function traceOutline(ctx: CanvasRenderingContext2D, body: Matter.Body): void {
 
 /** 필드 로컬 좌표계(원점 = 필드 좌상단)가 설정된 상태에서 호출한다 */
 export function drawBodies(ctx: CanvasRenderingContext2D, bodies: readonly Matter.Body[], options: DrawOptions = {}): void {
+  drawPulleyRopes(ctx, bodies);
   for (const body of bodies) {
     const tag = partTag(body);
     // 경계(바닥·벽) 바디는 배경에서 그리므로 건너뛴다

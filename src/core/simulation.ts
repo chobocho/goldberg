@@ -1,6 +1,6 @@
 import Matter from 'matter-js';
 import { FIELD } from '../config';
-import { PART_DEFS, type PartSpec } from '../parts/defs';
+import { PART_DEFS, PULLEY_TRAVEL, type PartSpec } from '../parts/defs';
 import { constraintEnds, createPart, partTag, ropeLinesOf, type Line } from '../parts/factory';
 
 const { Bodies, Body, Bounds, Composite, Engine, Events, Vector } = Matter;
@@ -69,6 +69,7 @@ export class Simulation {
   private readonly balloons = new Map<string, Matter.Body>();
   private readonly ropes = new Map<string, Matter.Constraint[]>();
   private readonly scissors = new Map<string, Matter.Body>();
+  private readonly pulleys: { left: Matter.Body; right: Matter.Body; leftHome: Matter.Vector; rightHome: Matter.Vector }[] = [];
   private pendingSnips = new Set<string>();
   private pendingPops = new Set<string>();
 
@@ -116,6 +117,11 @@ export class Simulation {
     if (spec.type === 'balloon') this.balloons.set(spec.id, bodies[0]);
     if (spec.type === 'scissors') this.scissors.set(spec.id, bodies[0]);
     if (spec.type === 'rope') this.ropes.set(spec.id, [...constraints]);
+    if (spec.type === 'pulley') {
+      const left = bodies.find((b) => partTag(b)?.role === 'main')!;
+      const right = bodies.find((b) => partTag(b)?.role === 'platform')!;
+      this.pulleys.push({ left, right, leftHome: { ...left.position }, rightHome: { ...right.position } });
+    }
   }
 
   /** 움직이는 물체가 가위에 닿으면 작동 예약. 풍선이 직접 닿으면 그 풍선도 터뜨린다. */
@@ -181,6 +187,29 @@ export class Simulation {
     const gone = new Set(bodies);
     for (const list of [this.movers, this.balls]) {
       for (let i = list.length - 1; i >= 0; i--) if (gone.has(list[i])) list.splice(i, 1);
+    }
+  }
+
+  /**
+   * 도르래 제약: 왼쪽이 s 만큼 내려가면 오른쪽은 s 만큼 올라간다 (줄 길이 합 일정).
+   * 제약 없이 한 스텝 진행한 결과를 질량 가중 평균으로 1자유도 운동에 투영한다.
+   * 양쪽에 같은 중력은 상쇄되고, 접촉으로 한쪽에 실린 하중만 차이로 남아 무거운 쪽이 내려간다.
+   */
+  private applyPulleys(): void {
+    for (const { left, right, leftHome, rightHome } of this.pulleys) {
+      const mL = left.mass;
+      const mR = right.mass;
+      let s = (mL * (left.position.y - leftHome.y) - mR * (right.position.y - rightHome.y)) / (mL + mR);
+      let v = (mL * left.velocity.y - mR * right.velocity.y) / (mL + mR);
+      // 이동 한계에서는 더 나아가려는 속도를 없앤다
+      if (s > PULLEY_TRAVEL || s < -PULLEY_TRAVEL) {
+        s = Math.max(-PULLEY_TRAVEL, Math.min(PULLEY_TRAVEL, s));
+        if (Math.sign(v) === Math.sign(s)) v = 0;
+      }
+      Body.setPosition(left, { x: leftHome.x, y: leftHome.y + s });
+      Body.setPosition(right, { x: rightHome.x, y: rightHome.y - s });
+      Body.setVelocity(left, { x: 0, y: v });
+      Body.setVelocity(right, { x: 0, y: -v });
     }
   }
 
@@ -299,6 +328,7 @@ export class Simulation {
     this.applyWind();
     this.applyBuoyancy();
     Engine.update(this.engine, STEP_MS);
+    this.applyPulleys();
     this.applyBelts();
     this.processSnips();
     // 충돌 해소 단계가 속도를 덮어쓰지 않도록 발사는 업데이트가 끝난 뒤 적용한다

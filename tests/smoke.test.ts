@@ -141,7 +141,7 @@ describe('스모크: 번들 실행', () => {
     expect(browser.errors).toEqual([]);
   });
 
-  it('샌드박스에서 로프·풍선·가위를 배치하고 실행해도 예외가 없다', () => {
+  it('샌드박스에서 로프·풍선·가위·도르래를 배치하고 실행해도 예외가 없다', () => {
     const browser = boot();
     tapRect(browser, sandboxButton);
     const types = Object.keys(SANDBOX.inventory) as PartType[];
@@ -160,6 +160,9 @@ describe('스모크: 번들 실행', () => {
     place('balloon', 420, 700);
     place('scissors', 330, 320);
     place('ball', 330, 160);
+    // 터치 드래그는 60px 위로 띄우므로 도르래 바퀴는 (150, 700), 쇠공은 왼쪽 받침(x=90) 위 (90, 500) 에 놓인다
+    place('pulley', 150, 760);
+    place('heavyBall', 90, 560);
     browser.frames(2);
     tapRect(browser, playButton(buildLayout(types, page), 'run'));
     browser.frames(240);

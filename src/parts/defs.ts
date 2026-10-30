@@ -18,6 +18,7 @@ export const PART_TYPES = [
   'balloon',
   'rope',
   'scissors',
+  'pulley',
 ] as const;
 
 export type PartType = (typeof PART_TYPES)[number];
@@ -77,6 +78,14 @@ export const SEESAW_BASE_HEIGHT = 40;
 export const ROPE_LENGTH = 120;
 export const ROPE_SEGMENTS = 6;
 const ROPE_BOB_RADIUS = 14;
+
+// 도르래 치수: 바퀴(spec 위치) 좌우 PULLEY_SPAN, 아래 PULLEY_DROP 에 받침이 매달린다.
+// 받침은 바퀴에 닿기 전까지 PULLEY_TRAVEL 만큼만 오르내린다.
+export const PULLEY_SPAN = 60;
+export const PULLEY_DROP = 120;
+export const PULLEY_TRAVEL = 90;
+export const PULLEY_WHEEL_RADIUS = 16;
+export const PULLEY_PLATFORM = { width: 80, height: 12 };
 
 // 바구니 치수: 바깥 크기와 벽 두께. 내부 센서는 벽 안쪽 아랫부분을 차지한다.
 export const BASKET_WIDTH = 96;
@@ -201,6 +210,21 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     outline: rectOutline(56, 24),
     rotatable: true,
     dynamic: false,
+  },
+  // 외곽선은 바퀴와 양쪽 받침의 초기 위치를 덮는다 (실행 중 받침이 오르내리는 범위는 포함하지 않음)
+  pulley: {
+    label: '도르래',
+    width: PULLEY_SPAN * 2 + PULLEY_PLATFORM.width,
+    height: PULLEY_DROP + PULLEY_WHEEL_RADIUS + PULLEY_PLATFORM.height / 2,
+    radius: PULLEY_WHEEL_RADIUS,
+    outline: [
+      { x: -(PULLEY_SPAN + PULLEY_PLATFORM.width / 2), y: -PULLEY_WHEEL_RADIUS },
+      { x: PULLEY_SPAN + PULLEY_PLATFORM.width / 2, y: -PULLEY_WHEEL_RADIUS },
+      { x: PULLEY_SPAN + PULLEY_PLATFORM.width / 2, y: PULLEY_DROP + PULLEY_PLATFORM.height / 2 },
+      { x: -(PULLEY_SPAN + PULLEY_PLATFORM.width / 2), y: PULLEY_DROP + PULLEY_PLATFORM.height / 2 },
+    ],
+    rotatable: false,
+    dynamic: true,
   },
   bell: {
     label: '종',

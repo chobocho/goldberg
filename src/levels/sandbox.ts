@@ -21,5 +21,6 @@ export const SANDBOX: LevelData = {
     balloon: Infinity,
     rope: Infinity,
     scissors: Infinity,
+    pulley: Infinity,
   },
 };
