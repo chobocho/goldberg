@@ -34,6 +34,10 @@ describe('validateLevel', () => {
     expect(validateLevel(base)).toEqual([]);
   });
 
+  it('무제한(Infinity) 수량은 허용한다', () => {
+    expect(validateLevel({ ...base, inventory: { plank: Infinity } })).toEqual([]);
+  });
+
   it.each<[string, Partial<LevelData>, RegExp]>([
     ['빈 id', { id: '' }, /id/],
     ['빈 이름', { name: '  ' }, /name/],

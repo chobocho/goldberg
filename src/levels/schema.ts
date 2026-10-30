@@ -54,8 +54,10 @@ export function validateLevel(level: LevelData): string[] {
   for (const [type, count] of entries) {
     if (!Object.prototype.hasOwnProperty.call(PART_DEFS, type)) errors.push(`inventory has unknown type: ${type}`);
     if (GOAL_TYPES.includes(type)) errors.push(`goal part ${type} cannot be in inventory`);
-    if (!(Number.isInteger(count) && count >= 0)) errors.push(`inventory count for ${type} must be a non-negative integer`);
-    else total += count;
+    // Infinity 는 무제한(샌드박스)을 뜻하므로 정수 규칙의 예외로 허용한다
+    if (!(count === Infinity || (Number.isInteger(count) && count >= 0))) {
+      errors.push(`inventory count for ${type} must be a non-negative integer or Infinity`);
+    } else total += count;
   }
   if (total === 0) errors.push('inventory must offer at least one part');
   return errors;

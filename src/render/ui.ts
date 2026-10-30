@@ -17,9 +17,58 @@ export interface Rect {
   h: number;
 }
 
-export type ButtonId = 'menu' | 'run' | 'rotateLeft' | 'rotateRight' | 'delete' | 'clear';
+export type ButtonId =
+  | 'menu'
+  | 'run'
+  | 'rotateLeft'
+  | 'rotateRight'
+  | 'delete'
+  | 'clear'
+  | 'winRetry'
+  | 'winNext'
+  | 'winMenu';
 
 export type UiElement = { kind: 'slot'; type: PartType; rect: Rect } | { kind: 'button'; id: ButtonId; rect: Rect };
+export type MenuElement = { kind: 'level'; index: number; rect: Rect } | { kind: 'sandbox'; rect: Rect };
+
+// 메뉴: 타이틀 아래 레벨 목록, 맨 아래 샌드박스. 레벨이 늘면 행 간격을 줄여 한 화면에 담는다.
+const MENU_LIST_TOP = 230;
+const MENU_LIST_BOTTOM = 940;
+const MENU_ROW_MAX_PITCH = 96;
+const MENU_ROW_GAP = 14;
+const MENU_BUTTON = { x: 60, w: WORLD_WIDTH - 120 };
+const SANDBOX_RECT: Rect = { x: MENU_BUTTON.x, y: 960, w: MENU_BUTTON.w, h: 76 };
+
+export function buildMenuLayout(levelCount: number): MenuElement[] {
+  const elements: MenuElement[] = [];
+  if (levelCount > 0) {
+    const pitch = Math.min(MENU_ROW_MAX_PITCH, (MENU_LIST_BOTTOM - MENU_LIST_TOP) / levelCount);
+    for (let i = 0; i < levelCount; i++) {
+      elements.push({
+        kind: 'level',
+        index: i,
+        rect: { x: MENU_BUTTON.x, y: MENU_LIST_TOP + i * pitch, w: MENU_BUTTON.w, h: pitch - MENU_ROW_GAP },
+      });
+    }
+  }
+  elements.push({ kind: 'sandbox', rect: SANDBOX_RECT });
+  return elements;
+}
+
+// 클리어 오버레이: 필드 상단 패널. 실행 결과(연쇄 반응)를 가리지 않도록 위쪽에 작게 띄운다.
+const WIN_PANEL: Rect = { x: (WORLD_WIDTH - 360) / 2, y: FIELD.y + 30, w: 360, h: 200 };
+
+export function buildWinLayout(hasNext: boolean): UiElement[] {
+  const w = 160;
+  const h = 64;
+  const gap = 16;
+  const x0 = WIN_PANEL.x + (WIN_PANEL.w - (w * 2 + gap)) / 2;
+  const y = WIN_PANEL.y + WIN_PANEL.h - h - 18;
+  return [
+    { kind: 'button', id: 'winRetry', rect: { x: x0, y, w, h } },
+    { kind: 'button', id: hasNext ? 'winNext' : 'winMenu', rect: { x: x0 + w + gap, y, w, h } },
+  ];
+}
 
 const MARGIN = 8;
 const SLOT_GAP = 6;
@@ -55,7 +104,7 @@ export function buildLayout(slotTypes: readonly PartType[]): UiElement[] {
 }
 
 /** 반열린 구간 [x, x+w) — 이웃 요소가 맞닿아도 한 점이 두 요소에 동시에 속하지 않는다 */
-export function hitTestUi(layout: readonly UiElement[], p: Vec): UiElement | null {
+export function hitTestUi<T extends { rect: Rect }>(layout: readonly T[], p: Vec): T | null {
   for (const e of layout) {
     const r = e.rect;
     if (p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h) return e;
@@ -78,6 +127,9 @@ const BUTTON_LABELS: Record<Exclude<ButtonId, 'run'>, string> = {
   rotateRight: '⟳ 회전',
   delete: '삭제',
   clear: '비우기',
+  winRetry: '↺ 다시',
+  winNext: '다음 ▶',
+  winMenu: '☰ 메뉴',
 };
 
 function roundRect(ctx: CanvasRenderingContext2D, r: Rect, radius: number): void {
@@ -182,6 +234,80 @@ export function drawUi(ctx: CanvasRenderingContext2D, layout: readonly UiElement
       case 'clear':
         drawButton(ctx, e.rect, BUTTON_LABELS.clear, { enabled: editable && state.hasPlaced, fontSize: 20 });
         break;
+      default:
+        break;
     }
+  }
+}
+
+/** 편집 모드에서 필드 상단에 레벨 힌트를 한 줄로 보여 준다 */
+export function drawHint(ctx: CanvasRenderingContext2D, hint: string): void {
+  if (!hint) return;
+  ctx.fillStyle = 'rgba(17,20,28,0.7)';
+  ctx.fillRect(0, FIELD.y, WORLD_WIDTH, 36);
+  ctx.fillStyle = COLORS.subtext;
+  ctx.font = '17px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(hint, WORLD_WIDTH / 2, FIELD.y + 18, WORLD_WIDTH - 24);
+}
+
+export function drawWinOverlay(ctx: CanvasRenderingContext2D, layout: readonly UiElement[], seconds: number): void {
+  roundRect(ctx, WIN_PANEL, 18);
+  ctx.fillStyle = 'rgba(17,20,28,0.92)';
+  ctx.fill();
+  ctx.strokeStyle = COLORS.gold;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.gold;
+  ctx.font = 'bold 40px system-ui, sans-serif';
+  ctx.fillText('성공!', WORLD_WIDTH / 2, WIN_PANEL.y + 44);
+  ctx.fillStyle = COLORS.text;
+  ctx.font = '19px system-ui, sans-serif';
+  ctx.fillText(`${seconds.toFixed(1)}초 만에 작동`, WORLD_WIDTH / 2, WIN_PANEL.y + 88);
+  for (const e of layout) {
+    if (e.kind !== 'button' || e.id === 'run') continue;
+    drawButton(ctx, e.rect, BUTTON_LABELS[e.id], { primary: e.id === 'winNext', fontSize: 21 });
+  }
+}
+
+export interface MenuLevelState {
+  name: string;
+  cleared: boolean;
+  unlocked: boolean;
+}
+
+export function drawMenu(
+  ctx: CanvasRenderingContext2D,
+  layout: readonly MenuElement[],
+  title: string,
+  levels: readonly MenuLevelState[],
+): void {
+  ctx.fillStyle = COLORS.background;
+  ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.gold;
+  ctx.font = 'bold 48px system-ui, sans-serif';
+  ctx.fillText(title, WORLD_WIDTH / 2, 120);
+  ctx.fillStyle = COLORS.subtext;
+  ctx.font = '20px system-ui, sans-serif';
+  ctx.fillText('부품을 놓아 연쇄 반응을 완성하세요', WORLD_WIDTH / 2, 175);
+
+  for (const e of layout) {
+    if (e.kind === 'sandbox') {
+      drawButton(ctx, e.rect, '🛠 샌드박스', { fontSize: 24 });
+      continue;
+    }
+    const level = levels[e.index];
+    if (!level) continue;
+    const mark = level.cleared ? ' ✓' : level.unlocked ? '' : ' 🔒';
+    drawButton(ctx, e.rect, `${e.index + 1}. ${level.name}${mark}`, {
+      enabled: level.unlocked,
+      primary: level.unlocked && !level.cleared,
+      fontSize: 24,
+    });
   }
 }

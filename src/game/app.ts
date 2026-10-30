@@ -1,25 +1,51 @@
 import type Matter from 'matter-js';
-import { FIELD, WORLD_HEIGHT, WORLD_WIDTH } from '../config';
+import { FIELD, GAME_TITLE, WORLD_HEIGHT, WORLD_WIDTH } from '../config';
 import { STEP_MS } from '../core/simulation';
 import { Editor } from '../editor/editor';
-import { PRACTICE } from '../levels/practice';
+import { LEVELS } from '../levels';
+import { SANDBOX } from '../levels/sandbox';
+import type { LevelData } from '../levels/schema';
 import { PART_DEFS, type PartSpec, type PartType, type Vec } from '../parts/defs';
 import { createPart } from '../parts/factory';
 import { COLORS, drawBodies, drawFieldBackground } from '../render/renderer';
-import { buildLayout, drawUi, hitTestUi, type ButtonId, type UiElement } from '../render/ui';
+import {
+  buildLayout,
+  buildMenuLayout,
+  buildWinLayout,
+  drawHint,
+  drawMenu,
+  drawUi,
+  drawWinOverlay,
+  hitTestUi,
+  type ButtonId,
+  type UiElement,
+} from '../render/ui';
 import { computeViewport, screenToWorld, type Viewport } from '../render/viewport';
+import { browserStorage, isUnlocked, loadProgress, saveProgress } from './progress';
 import { GameSession } from './session';
 
 // 터치로 새 부품을 끌 때 손가락에 가려지지 않도록 부품을 손가락 위쪽에 띄우는 거리(월드 단위)
 const TOUCH_LIFT = 60;
 
-/** 캔버스·입력·렌더 루프를 묶는 최상위 컨트롤러. 게임 규칙은 Editor/GameSession 에 위임한다. */
+interface Play {
+  level: LevelData;
+  /** LEVELS 안의 순번. 샌드박스는 null */
+  index: number | null;
+  session: GameSession;
+  layout: UiElement[];
+  winLayout: UiElement[];
+}
+
+/** 캔버스·입력·렌더 루프와 화면 전환(메뉴 ↔ 플레이)을 묶는 최상위 컨트롤러. 게임 규칙은 Editor/GameSession 에 위임한다. */
 export class App {
   private readonly ctx: CanvasRenderingContext2D;
   private viewport: Viewport = computeViewport({ width: 0, height: 0, dpr: 1 }, WORLD_WIDTH, WORLD_HEIGHT);
-  private session: GameSession;
-  private layout: UiElement[];
-  private slotTypes: PartType[];
+  private readonly menuLayout = buildMenuLayout(LEVELS.length);
+  private readonly levelIds = LEVELS.map((l) => l.id);
+  private readonly storage = browserStorage();
+  private readonly cleared = loadProgress(this.storage);
+  /** null 이면 메뉴 화면 */
+  private play: Play | null = null;
   private activePointer: number | null = null;
   private lastTime: number | null = null;
   // 편집 모드 미리보기용 바디 캐시. 키는 부품 상태 문자열이라 위치/각도가 바뀐 부품만 다시 만든다.
@@ -29,9 +55,6 @@ export class App {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2D context is not available');
     this.ctx = ctx;
-    this.slotTypes = Object.keys(PRACTICE.inventory) as PartType[];
-    this.layout = buildLayout(this.slotTypes);
-    this.session = new GameSession(new Editor(PRACTICE.fixed, PRACTICE.inventory));
   }
 
   start(): void {
@@ -57,10 +80,38 @@ export class App {
     this.canvas.height = this.viewport.pixelHeight;
   }
 
+  // ---- 화면 전환 ----
+
+  private openLevel(level: LevelData, index: number | null): void {
+    const types = Object.keys(level.inventory) as PartType[];
+    this.play = {
+      level,
+      index,
+      session: new GameSession(new Editor(level.fixed, level.inventory)),
+      layout: buildLayout(types),
+      winLayout: buildWinLayout(index !== null && index + 1 < LEVELS.length),
+    };
+    this.previewCache.clear();
+  }
+
+  private openMenu(): void {
+    this.play = null;
+    this.previewCache.clear();
+  }
+
+  private recordWin(play: Play): void {
+    if (play.index === null || play.session.result !== 'won' || this.cleared.has(play.level.id)) return;
+    this.cleared.add(play.level.id);
+    saveProgress(this.storage, this.cleared);
+  }
+
   private frame(now: number): void {
     const dt = this.lastTime === null ? 0 : now - this.lastTime;
     this.lastTime = now;
-    this.session.update(dt);
+    if (this.play) {
+      this.play.session.update(dt);
+      this.recordWin(this.play);
+    }
     this.draw();
     requestAnimationFrame((t) => this.frame(t));
   }
@@ -85,13 +136,25 @@ export class App {
     this.activePointer = e.pointerId;
     this.canvas.setPointerCapture?.(e.pointerId);
 
-    const hit = hitTestUi(this.layout, p);
+    const play = this.play;
+    if (!play) {
+      this.onMenuTap(p);
+      return;
+    }
+    if (this.showsWinOverlay(play)) {
+      const hit = hitTestUi(play.winLayout, p);
+      if (hit?.kind === 'button') {
+        this.onButton(hit.id);
+        return;
+      }
+    }
+    const hit = hitTestUi(play.layout, p);
     if (hit?.kind === 'button') {
       this.onButton(hit.id);
       return;
     }
-    if (this.session.mode !== 'edit') return;
-    const editor = this.session.editor;
+    if (play.session.mode !== 'edit') return;
+    const editor = play.session.editor;
     if (hit?.kind === 'slot') {
       const lift = e.pointerType === 'mouse' ? 0 : -TOUCH_LIFT;
       editor.beginNew(hit.type, this.toField(p), { x: 0, y: lift });
@@ -100,17 +163,27 @@ export class App {
     }
   }
 
+  private onMenuTap(p: Vec): void {
+    const hit = hitTestUi(this.menuLayout, p);
+    if (hit?.kind === 'sandbox') this.openLevel(SANDBOX, null);
+    else if (hit?.kind === 'level' && isUnlocked(this.levelIds, this.cleared, hit.index)) {
+      this.openLevel(LEVELS[hit.index], hit.index);
+    }
+  }
+
   private onPointerMove(e: PointerEvent): void {
-    if (e.pointerId !== this.activePointer) return;
+    if (e.pointerId !== this.activePointer || !this.play) return;
     const p = this.toWorld(e);
-    if (p && this.session.editor.drag) this.session.editor.dragTo(this.toField(p));
+    const editor = this.play.session.editor;
+    if (p && editor.drag) editor.dragTo(this.toField(p));
   }
 
   private onPointerUp(e: PointerEvent): void {
     if (e.pointerId !== this.activePointer) return;
     this.activePointer = null;
+    if (!this.play) return;
     const p = this.toWorld(e);
-    const editor = this.session.editor;
+    const editor = this.play.session.editor;
     if (!editor.drag) return;
     if (p) editor.dragTo(this.toField(p));
     editor.endDrag(p !== null && p.y >= FIELD.y + FIELD.height);
@@ -119,16 +192,29 @@ export class App {
   private onPointerCancel(e: PointerEvent): void {
     if (e.pointerId !== this.activePointer) return;
     this.activePointer = null;
-    this.session.editor.cancelDrag();
+    this.play?.session.editor.cancelDrag();
   }
 
   private onButton(id: ButtonId): void {
-    const { session } = this;
+    const play = this.play;
+    if (!play) return;
+    const { session } = play;
     const editor = session.editor;
-    if (id === 'run') {
-      if (session.mode === 'edit') session.run();
-      else session.reset();
-      return;
+    switch (id) {
+      case 'menu':
+      case 'winMenu':
+        this.openMenu();
+        return;
+      case 'winNext':
+        if (play.index !== null && play.index + 1 < LEVELS.length) this.openLevel(LEVELS[play.index + 1], play.index + 1);
+        return;
+      case 'winRetry':
+        session.reset();
+        return;
+      case 'run':
+        if (session.mode === 'edit') session.run();
+        else session.reset();
+        return;
     }
     if (session.mode !== 'edit') return;
     switch (id) {
@@ -144,10 +230,12 @@ export class App {
       case 'clear':
         editor.clearPlaced();
         break;
-      case 'menu':
-        // 메뉴 화면은 레벨 선택 작업에서 연결한다
-        break;
     }
+  }
+
+  /** 샌드박스는 목표가 있어도 클리어 개념이 없으므로 오버레이를 띄우지 않는다 */
+  private showsWinOverlay(play: Play): boolean {
+    return play.index !== null && play.session.result === 'won';
   }
 
   // ---- 렌더 ----
@@ -165,27 +253,6 @@ export class App {
     return bodies;
   }
 
-  private drawWinBanner(solvedAtStep: number): void {
-    const { ctx } = this;
-    const w = 320;
-    const h = 120;
-    const x = (FIELD.width - w) / 2;
-    const y = 40;
-    ctx.fillStyle = 'rgba(17,20,28,0.88)';
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = COLORS.gold;
-    ctx.lineWidth = 3;
-    ctx.strokeRect(x, y, w, h);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = COLORS.gold;
-    ctx.font = 'bold 40px system-ui, sans-serif';
-    ctx.fillText('성공!', FIELD.width / 2, y + 45);
-    ctx.fillStyle = COLORS.text;
-    ctx.font = '20px system-ui, sans-serif';
-    ctx.fillText(`${((solvedAtStep * STEP_MS) / 1000).toFixed(1)}초 만에 작동`, FIELD.width / 2, y + 90);
-  }
-
   private draw(): void {
     const { ctx, canvas } = this;
     const { dpr, scale, offsetX, offsetY } = this.viewport;
@@ -195,14 +262,32 @@ export class App {
     const s = dpr * scale;
     ctx.setTransform(s, 0, 0, s, dpr * offsetX, dpr * offsetY);
 
-    const { session } = this;
+    if (!this.play) {
+      drawMenu(
+        ctx,
+        this.menuLayout,
+        GAME_TITLE,
+        LEVELS.map((level, i) => ({
+          name: level.name,
+          cleared: this.cleared.has(level.id),
+          unlocked: isUnlocked(this.levelIds, this.cleared, i),
+        })),
+      );
+      return;
+    }
+    this.drawPlay(this.play);
+  }
+
+  private drawPlay(play: Play): void {
+    const { ctx } = this;
+    const { session, level } = play;
     const editor = session.editor;
+
     ctx.save();
     ctx.translate(FIELD.x, FIELD.y);
     drawFieldBackground(ctx);
     if (session.simulation) {
       drawBodies(ctx, session.simulation.allBodies(), { achievedIds: session.simulation.achievedGoals });
-      if (session.result === 'won') this.drawWinBanner(session.simulation.solvedAtStep ?? 0);
     } else {
       const drag = editor.drag;
       drawBodies(ctx, this.previewBodies(editor.displayParts()), {
@@ -214,9 +299,14 @@ export class App {
     }
     ctx.restore();
 
+    if (session.mode === 'edit') drawHint(ctx, level.hint);
+    if (this.showsWinOverlay(play)) {
+      drawWinOverlay(ctx, play.winLayout, ((session.simulation?.solvedAtStep ?? 0) * STEP_MS) / 1000);
+    }
+
     const selected = editor.selected();
-    drawUi(ctx, this.layout, {
-      title: '연습장',
+    drawUi(ctx, play.layout, {
+      title: play.index === null ? level.name : `${play.index + 1}. ${level.name}`,
       running: session.mode === 'run',
       remaining: (type) => editor.remaining(type),
       hasSelection: selected !== null,
