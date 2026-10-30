@@ -40,21 +40,26 @@ export interface PartDef {
   height: number;
   /** 원형 부품의 반지름 */
   radius?: number;
-  /** 배치 판정용 로컬 볼록 외곽선 (각도 0 기준, 중심 원점) */
+  /** 로컬 볼록 외곽선 (각도 0 기준, 중심 원점). 아이콘 크기·배치 판정에 쓴다. */
   outline: Vec[];
+  /**
+   * 오목한 부품의 배치 판정용 볼록 조각들. 있으면 outline 대신 이것으로 겹침·경계·터치를 판정한다.
+   * 예: 도르래는 받침 위 빈 공간에 공을 올려놓을 수 있어야 하므로 바퀴와 받침을 따로 둔다.
+   */
+  pieces?: Vec[][];
   rotatable: boolean;
   /** 실행 중 움직이는 부품인지 (편집기 표시·센서 판정용) */
   dynamic: boolean;
 }
 
-function rectOutline(w: number, h: number): Vec[] {
+function rectOutline(w: number, h: number, cx = 0, cy = 0): Vec[] {
   const hw = w / 2;
   const hh = h / 2;
   return [
-    { x: -hw, y: -hh },
-    { x: hw, y: -hh },
-    { x: hw, y: hh },
-    { x: -hw, y: hh },
+    { x: cx - hw, y: cy - hh },
+    { x: cx + hw, y: cy - hh },
+    { x: cx + hw, y: cy + hh },
+    { x: cx - hw, y: cy + hh },
   ];
 }
 
@@ -222,6 +227,11 @@ export const PART_DEFS: Record<PartType, PartDef> = {
       { x: PULLEY_SPAN + PULLEY_PLATFORM.width / 2, y: -PULLEY_WHEEL_RADIUS },
       { x: PULLEY_SPAN + PULLEY_PLATFORM.width / 2, y: PULLEY_DROP + PULLEY_PLATFORM.height / 2 },
       { x: -(PULLEY_SPAN + PULLEY_PLATFORM.width / 2), y: PULLEY_DROP + PULLEY_PLATFORM.height / 2 },
+    ],
+    pieces: [
+      rectOutline(PULLEY_WHEEL_RADIUS * 2, PULLEY_WHEEL_RADIUS * 2),
+      rectOutline(PULLEY_PLATFORM.width, PULLEY_PLATFORM.height, -PULLEY_SPAN, PULLEY_DROP),
+      rectOutline(PULLEY_PLATFORM.width, PULLEY_PLATFORM.height, PULLEY_SPAN, PULLEY_DROP),
     ],
     rotatable: false,
     dynamic: true,

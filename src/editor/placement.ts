@@ -1,6 +1,10 @@
 import { FIELD } from '../config';
 import { PART_DEFS, type PartSpec, type Vec } from '../parts/defs';
-import { OVERLAP_EPSILON, distanceToPolygon, pointInPolygon, polygonBounds, polygonsOverlap, worldOutline } from './geometry';
+import { OVERLAP_EPSILON, distanceToPolygon, piecesBounds, pointInPolygon, polygonsOverlap, worldPieces } from './geometry';
+
+function piecesOverlap(a: readonly Vec[][], b: readonly Vec[][]): boolean {
+  return a.some((pa) => b.some((pb) => polygonsOverlap(pa, pb)));
+}
 
 /** 배치 격자 (px). 손가락으로도 정렬이 쉽도록 너무 촘촘하지 않게 둔다. */
 export const GRID = 10;
@@ -36,8 +40,8 @@ export function rotated(spec: PartSpec, dir: 1 | -1): PartSpec | null {
 }
 
 export function checkPlacement(spec: PartSpec, others: readonly PartSpec[]): PlacementResult {
-  const outline = worldOutline(spec);
-  const b = polygonBounds(outline);
+  const pieces = worldPieces(spec);
+  const b = piecesBounds(pieces);
   if (
     b.minX < -OVERLAP_EPSILON ||
     b.minY < -OVERLAP_EPSILON ||
@@ -48,14 +52,14 @@ export function checkPlacement(spec: PartSpec, others: readonly PartSpec[]): Pla
   }
   for (const other of others) {
     if (other.id === spec.id) continue;
-    if (polygonsOverlap(outline, worldOutline(other))) return { ok: false, reason: 'overlap', otherId: other.id };
+    if (piecesOverlap(pieces, worldPieces(other))) return { ok: false, reason: 'overlap', otherId: other.id };
   }
   return { ok: true };
 }
 
 /** 필드 밖으로 나간 만큼 안쪽으로 밀어 넣는다. 바닥 아래로 끌면 바닥 위에 올려놓는 효과. */
 export function clampIntoField(spec: PartSpec): PartSpec {
-  const b = polygonBounds(worldOutline(spec));
+  const b = piecesBounds(worldPieces(spec));
   const dx = b.minX < 0 ? -b.minX : b.maxX > FIELD.width ? FIELD.width - b.maxX : 0;
   const dy = b.minY < 0 ? -b.minY : b.maxY > FIELD.height ? FIELD.height - b.maxY : 0;
   if (dx === 0 && dy === 0) return spec;
@@ -67,14 +71,14 @@ export function clampIntoField(spec: PartSpec): PartSpec {
  * 2차: 없으면 HIT_SLOP 안에서 가장 가까운 부품. 여유 범위 때문에 바로 아래 부품을 놓치지 않도록 두 단계로 나눈다.
  */
 export function hitTestParts(parts: readonly PartSpec[], p: Vec): string | null {
-  const outlines = parts.map(worldOutline);
+  const pieces = parts.map(worldPieces);
   for (let i = parts.length - 1; i >= 0; i--) {
-    if (pointInPolygon(p, outlines[i])) return parts[i].id;
+    if (pieces[i].some((piece) => pointInPolygon(p, piece))) return parts[i].id;
   }
   let bestId: string | null = null;
   let bestDist = HIT_SLOP;
   for (let i = parts.length - 1; i >= 0; i--) {
-    const d = distanceToPolygon(p, outlines[i]);
+    const d = Math.min(...pieces[i].map((piece) => distanceToPolygon(p, piece)));
     if (d <= bestDist) {
       bestDist = d;
       bestId = parts[i].id;

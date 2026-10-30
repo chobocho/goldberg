@@ -37,6 +37,13 @@ describe('PART_DEFS', () => {
     expect(outline.length).toBeGreaterThanOrEqual(3);
     expect(isConvex(outline)).toBe(true);
   });
+
+  it.each(PART_TYPES)('%s 의 배치 판정 조각도 모두 볼록 다각형이다', (type) => {
+    for (const piece of PART_DEFS[type].pieces ?? [PART_DEFS[type].outline]) {
+      expect(piece.length).toBeGreaterThanOrEqual(3);
+      expect(isConvex(piece)).toBe(true);
+    }
+  });
 });
 
 describe('createPart', () => {

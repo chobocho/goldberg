@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FIELD } from '../src/config';
-import { polygonBounds, worldOutline } from '../src/editor/geometry';
+import { polygonBounds, worldOutline, worldPieces } from '../src/editor/geometry';
 import {
   ROTATION_STEP,
   checkPlacement,
@@ -124,5 +124,39 @@ describe('hitTestParts', () => {
 
   it('빈 목록은 null', () => {
     expect(hitTestParts([], { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe('여러 조각 외곽선 (도르래)', () => {
+  // 도르래 (300, 400): 바퀴 (300,400) r16, 받침 (240,520)/(360,520) 80x12
+  const pulley = p('lift', 'pulley', 300, 400);
+
+  it('도르래는 바퀴 + 받침 2개, 3조각으로 판정한다', () => {
+    expect(worldPieces(pulley)).toHaveLength(3);
+    expect(worldPieces(p('a', 'plank', 100, 100))).toEqual([worldOutline(p('a', 'plank', 100, 100))]);
+  });
+
+  it('받침 위(바퀴 아래 빈 공간)에 공을 놓을 수 있다', () => {
+    expect(checkPlacement(p('b', 'ball', 360, 497), [pulley])).toEqual({ ok: true });
+  });
+
+  it('받침이나 바퀴와 겹치면 overlap', () => {
+    expect(checkPlacement(p('b', 'ball', 360, 515), [pulley])).toEqual({ ok: false, reason: 'overlap', otherId: 'lift' });
+    expect(checkPlacement(p('b', 'ball', 300, 405), [pulley])).toEqual({ ok: false, reason: 'overlap', otherId: 'lift' });
+  });
+
+  it('반대로 도르래를 놓을 때도 각 조각으로 판정한다', () => {
+    expect(checkPlacement(pulley, [p('b', 'ball', 360, 497)])).toEqual({ ok: true });
+  });
+
+  it('받침 사이 빈 공간을 눌러도 도르래가 잡히지 않는다', () => {
+    expect(hitTestParts([pulley], { x: 300, y: 470 })).toBeNull();
+    expect(hitTestParts([pulley], { x: 360, y: 520 })).toBe('lift');
+  });
+
+  it('경계 판정과 밀어넣기는 모든 조각의 합집합 기준이다', () => {
+    const low = clampIntoField(p('lift', 'pulley', 300, 800));
+    const maxY = Math.max(...worldPieces(low).map((piece) => polygonBounds(piece).maxY));
+    expect(maxY).toBeCloseTo(FIELD.height, 9);
   });
 });

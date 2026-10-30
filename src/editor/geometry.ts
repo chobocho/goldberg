@@ -12,12 +12,23 @@ export const OVERLAP_EPSILON = 0.01;
 
 /** 부품 외곽선을 회전·평행이동한 필드 좌표 다각형 */
 export function worldOutline(spec: PartSpec): Vec[] {
+  return transform(spec, PART_DEFS[spec.type].outline);
+}
+
+function transform(spec: PartSpec, local: readonly Vec[]): Vec[] {
   const c = Math.cos(spec.angle);
   const s = Math.sin(spec.angle);
-  return PART_DEFS[spec.type].outline.map((p) => ({
-    x: spec.x + p.x * c - p.y * s,
-    y: spec.y + p.x * s + p.y * c,
-  }));
+  return local.map((p) => ({ x: spec.x + p.x * c - p.y * s, y: spec.y + p.x * s + p.y * c }));
+}
+
+/** 배치 판정용 볼록 조각들 (조각 정의가 없으면 외곽선 하나) */
+export function worldPieces(spec: PartSpec): Vec[][] {
+  const def = PART_DEFS[spec.type];
+  return (def.pieces ?? [def.outline]).map((piece) => transform(spec, piece));
+}
+
+export function piecesBounds(pieces: readonly (readonly Vec[])[]): Bounds {
+  return polygonBounds(pieces.flat());
 }
 
 export function polygonBounds(poly: readonly Vec[]): Bounds {
