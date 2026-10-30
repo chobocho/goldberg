@@ -19,4 +19,5 @@ export const SOLUTIONS: Record<string, PartSpec[]> = {
   'wind-and-belt': [part('c', 'conveyor', 100, 500), part('f', 'fan', 230, 540, -15)],
   'cut-the-rope': [part('sc', 'scissors', 140, 190), part('s', 'seesaw', 150, 620), part('b', 'ball', 230, 590)],
   'pulley-lift': [part('p1', 'plank', 80, 200, 15)],
+  'balloon-flight': [part('p1', 'plank', 150, 280, -15)],
 };

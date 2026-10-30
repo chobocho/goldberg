@@ -92,4 +92,12 @@ export const LEVELS: LevelData[] = [
     ],
     inventory: { plank: 2 },
   },
+  {
+    // 풍선이 곧장 떠오르면 위의 가위에 닿아 터진다. 판자 아랫면을 타고 미끄러지게 해서 종으로 보낸다.
+    id: 'balloon-flight',
+    name: '풍선 비행',
+    hint: '풍선은 위로 떠올라요. 판자를 뒤집힌 경사로처럼 써서 가위를 피하세요.',
+    fixed: [part('balloon', 'balloon', 80, 780), part('scissors', 'scissors', 80, 120), part('bell', 'bell', 280, 200)],
+    inventory: { plank: 2 },
+  },
 ];

@@ -12,7 +12,7 @@ const insideField = (r: Rect) =>
   r.x >= FIELD.x && r.y >= FIELD.y && r.x + r.w <= FIELD.x + FIELD.width && r.y + r.h <= FIELD.y + FIELD.height;
 
 describe('buildMenuLayout', () => {
-  it.each([1, 5, 8])('레벨 %i개: 레벨 버튼 + 샌드박스 버튼, 화면 안, 겹침 없음, 최소 터치 크기', (n) => {
+  it.each([1, 5, 8, 9])('레벨 %i개: 레벨 버튼 + 샌드박스 버튼, 화면 안, 겹침 없음, 최소 터치 크기', (n) => {
     const layout = buildMenuLayout(n);
     expect(layout.filter((e) => e.kind === 'level').map((e) => (e.kind === 'level' ? e.index : -1))).toEqual(
       [...Array(n).keys()],
