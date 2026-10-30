@@ -57,4 +57,39 @@ export const LEVELS: LevelData[] = [
     ],
     inventory: { spring: 1, plank: 2 },
   },
+  // 6~8: 후순위 부품 레벨. 저장된 진행 기록이 깨지지 않도록 기존 레벨 뒤에 덧붙인다.
+  {
+    id: 'wind-and-belt',
+    name: '바람과 벨트',
+    hint: '컨베이어로 공을 나르고, 바람으로 기둥 위 바구니까지 띄워 보내세요.',
+    fixed: [part('ball', 'ball', 60, 60), part('pillar', 'wall', 470, 770), part('goal', 'basket', 470, 661)],
+    inventory: { conveyor: 1, fan: 1 },
+  },
+  {
+    id: 'cut-the-rope',
+    name: '끊어진 줄',
+    hint: '굴러오는 공이 가위를 치게 하세요. 줄이 끊기면 추가 떨어져요.',
+    fixed: [
+      part('trigger', 'ball', 480, 40),
+      part('ramp', 'plank', 420, 130, -30),
+      part('shelf', 'plank', 240, 210),
+      part('rope', 'rope', 110, 40),
+      part('roof', 'plank', 340, 571),
+      part('bell', 'bell', 340, 600),
+    ],
+    inventory: { scissors: 1, seesaw: 1, ball: 1 },
+  },
+  {
+    id: 'pulley-lift',
+    name: '도르래 엘리베이터',
+    hint: '쇠공을 도르래 왼쪽 받침에 떨어뜨리면 오른쪽 공이 올라가요.',
+    fixed: [
+      part('heavy', 'heavyBall', 60, 60),
+      part('lift', 'pulley', 300, 400),
+      part('ball', 'ball', 360, 497),
+      part('roof', 'plank', 360, 353),
+      part('bell', 'bell', 360, 383),
+    ],
+    inventory: { plank: 2 },
+  },
 ];

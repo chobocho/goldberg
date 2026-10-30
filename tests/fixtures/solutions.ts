@@ -16,4 +16,7 @@ export const SOLUTIONS: Record<string, PartSpec[]> = {
   'seesaw-launch': [part('s', 'seesaw', 190, 600), part('b', 'ball', 290, 570)],
   'spring-jump': [part('sp', 'spring', 80, 780, 15)],
   'goldberg-finale': [part('sp', 'spring', 200, 590, 15), part('p1', 'plank', 380, 480, -30)],
+  'wind-and-belt': [part('c', 'conveyor', 100, 500), part('f', 'fan', 230, 540, -15)],
+  'cut-the-rope': [part('sc', 'scissors', 140, 190), part('s', 'seesaw', 150, 620), part('b', 'ball', 230, 590)],
+  'pulley-lift': [part('p1', 'plank', 80, 200, 15)],
 };

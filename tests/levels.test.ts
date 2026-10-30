@@ -63,9 +63,27 @@ describe('validateLevel', () => {
 });
 
 describe('LEVELS', () => {
-  it('오리지널 스테이지 5개, id 중복 없음', () => {
-    expect(LEVELS).toHaveLength(5);
-    expect(new Set(LEVELS.map((l) => l.id)).size).toBe(5);
+  it('오리지널 스테이지 8개, id 중복 없음', () => {
+    expect(LEVELS).toHaveLength(8);
+    expect(new Set(LEVELS.map((l) => l.id)).size).toBe(8);
+  });
+
+  it('기존 레벨 id 와 순서는 유지된다 (저장된 진행 기록 호환)', () => {
+    expect(LEVELS.slice(0, 5).map((l) => l.id)).toEqual([
+      'first-ramp',
+      'domino-relay',
+      'seesaw-launch',
+      'spring-jump',
+      'goldberg-finale',
+    ]);
+  });
+
+  it('후반 레벨은 새 부품(컨베이어·선풍기, 로프·가위, 도르래)을 다룬다', () => {
+    const uses = (i: number) =>
+      new Set([...LEVELS[i].fixed.map((p) => p.type), ...Object.keys(LEVELS[i].inventory)]);
+    expect([...uses(5)]).toEqual(expect.arrayContaining(['conveyor', 'fan']));
+    expect([...uses(6)]).toEqual(expect.arrayContaining(['rope', 'scissors']));
+    expect([...uses(7)]).toEqual(expect.arrayContaining(['pulley']));
   });
 
   it('모든 레벨에 정답 배치가 준비되어 있다', () => {
