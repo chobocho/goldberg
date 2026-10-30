@@ -59,3 +59,32 @@ describe('GameSession', () => {
     expect(s.simulation).toBe(sim);
   });
 });
+
+describe('GameSession 클리어', () => {
+  function winnable() {
+    const editor = new Editor(
+      [
+        { id: 'b', type: 'ball', x: 300, y: 600, angle: 0 },
+        { id: 'goal', type: 'basket', x: 300, y: 801, angle: 0 },
+      ],
+      { plank: 1 },
+    );
+    return new GameSession(editor);
+  }
+
+  it('목표를 달성하면 result 가 won 이 된다', () => {
+    const s = winnable();
+    expect(s.result).toBe('none');
+    s.run();
+    for (let i = 0; i < 60 && s.result === 'none'; i++) s.update(1000 / 60);
+    expect(s.result).toBe('won');
+  });
+
+  it('reset 하면 result 가 초기화된다', () => {
+    const s = winnable();
+    s.run();
+    for (let i = 0; i < 60; i++) s.update(1000 / 60);
+    s.reset();
+    expect(s.result).toBe('none');
+  });
+});

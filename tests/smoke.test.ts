@@ -67,6 +67,26 @@ describe('스모크: 번들 실행', () => {
     expect(browser.errors).toEqual([]);
   });
 
+  it('판자를 놓고 회전한 뒤 실행하면 목표를 달성해 성공 배너를 그린다', () => {
+    const browser = boot();
+    const layout = buildLayout(Object.keys(PRACTICE.inventory) as never);
+    const find = (pred: (e: (typeof layout)[number]) => boolean) => layout.find(pred)!;
+    const center = (r: { x: number; y: number; w: number; h: number }) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+    const slot = find((e) => e.kind === 'slot' && e.type === 'plank');
+    const rotate = find((e) => e.kind === 'button' && e.id === 'rotateRight');
+    const run = find((e) => e.kind === 'button' && e.id === 'run');
+
+    // 터치 드래그는 부품을 손가락 위 60px 에 띄우므로, 필드 (110, 400) 에서 놓으면 판자는 (110, 340) 에 놓인다.
+    // 이 위치에 30° 판자를 두면 연습장 공이 바구니로 굴러간다 (시뮬레이션으로 확인한 배치)
+    browser.drag(center(slot.rect), { x: FIELD.x + 110, y: FIELD.y + 400 });
+    browser.tap(center(rotate.rect).x, center(rotate.rect).y);
+    browser.tap(center(rotate.rect).x, center(rotate.rect).y);
+    browser.tap(center(run.rect).x, center(run.rect).y);
+    browser.frames(300);
+    expect(browser.errors).toEqual([]);
+    expect(browser.texts).toContain('성공!');
+  });
+
   it('멀티터치 두 번째 손가락은 무시한다', () => {
     const browser = boot();
     browser.pointer('pointerdown', 270, 400, 1);

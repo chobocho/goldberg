@@ -10,6 +10,7 @@ const MAX_STEPS_PER_FRAME = 5;
 export class GameSession {
   mode: Mode = 'edit';
   simulation: Simulation | null = null;
+  result: 'none' | 'won' = 'none';
   private accumulator = 0;
 
   constructor(readonly editor: Editor) {}
@@ -25,6 +26,7 @@ export class GameSession {
 
   reset(): void {
     this.simulation = null;
+    this.result = 'none';
     this.mode = 'edit';
   }
 
@@ -33,5 +35,7 @@ export class GameSession {
     const { steps, accumulatorMs } = advanceFixedSteps(this.accumulator, frameMs, STEP_MS, MAX_STEPS_PER_FRAME);
     this.accumulator = accumulatorMs;
     for (let i = 0; i < steps; i++) this.simulation.step();
+    // 클리어 후에도 시뮬레이션은 계속 돌려 연쇄 반응의 여운을 보여 준다
+    if (this.result === 'none' && this.simulation.isSolved()) this.result = 'won';
   }
 }

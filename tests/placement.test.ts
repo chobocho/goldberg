@@ -10,7 +10,9 @@ import {
   rotated,
   snap,
 } from '../src/editor/placement';
-import type { PartSpec } from '../src/parts/defs';
+import { PART_DEFS, type PartSpec } from '../src/parts/defs';
+
+const DOMINO = PART_DEFS.domino;
 
 const p = (id: string, type: PartSpec['type'], x: number, y: number, angle = 0): PartSpec => ({ id, type, x, y, angle });
 
@@ -69,7 +71,7 @@ describe('checkPlacement', () => {
   });
 
   it('경계에 정확히 닿는 것은 허용', () => {
-    expect(checkPlacement(p('a', 'domino', 6, FIELD.height - 28), [])).toEqual({ ok: true });
+    expect(checkPlacement(p('a', 'domino', DOMINO.width / 2, FIELD.height - DOMINO.height / 2), [])).toEqual({ ok: true });
   });
 
   it('다른 부품과 겹치면 overlap 과 상대 id 를 알려준다', () => {
@@ -78,7 +80,7 @@ describe('checkPlacement', () => {
   });
 
   it('맞닿기만 한 이웃 도미노는 허용', () => {
-    expect(checkPlacement(p('a', 'domino', 100, 500), [p('b', 'domino', 112, 500)])).toEqual({ ok: true });
+    expect(checkPlacement(p('a', 'domino', 100, 500), [p('b', 'domino', 100 + DOMINO.width, 500)])).toEqual({ ok: true });
   });
 
   it('자기 자신(같은 id)과는 비교하지 않는다', () => {

@@ -100,11 +100,12 @@ export const PART_DEFS: Record<PartType, PartDef> = {
     rotatable: true,
     dynamic: false,
   },
+  // 치수는 matter-js 에서 연쇄 전도가 안정적으로 이어지는 값을 실험으로 찾은 것 (간격 24~36px)
   domino: {
     label: '도미노',
-    width: 12,
-    height: 56,
-    outline: rectOutline(12, 56),
+    width: 10,
+    height: 60,
+    outline: rectOutline(10, 60),
     rotatable: false,
     dynamic: true,
   },

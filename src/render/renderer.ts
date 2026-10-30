@@ -43,6 +43,8 @@ export interface DrawOptions {
   invalidIds?: ReadonlySet<string>;
   /** 플레이어가 배치한 부품 id (고정 부품과 구분 표시) */
   playerIds?: ReadonlySet<string>;
+  /** 달성한 목표 부품 id (금색으로 강조) */
+  achievedIds?: ReadonlySet<string>;
 }
 
 export function drawFieldBackground(ctx: CanvasRenderingContext2D): void {
@@ -170,7 +172,21 @@ export function drawBodies(ctx: CanvasRenderingContext2D, bodies: readonly Matte
     if (!tag) continue;
     const ghost = options.ghostIds?.has(tag.id) ?? false;
     ctx.globalAlpha = ghost ? 0.55 : 1;
+    const achieved = options.achievedIds?.has(tag.id) ?? false;
+    // 달성한 바구니는 안쪽(센서 영역)을 금빛으로 채우고, 종은 바깥에 빛 테두리를 두른다
+    if (achieved && tag.role === 'sensor') {
+      tracePolygon(ctx, body);
+      ctx.fillStyle = 'rgba(242,193,78,0.45)';
+      ctx.fill();
+    }
     drawPartBody(ctx, body, tag.type, tag.role);
+    if (achieved && tag.type === 'bell') {
+      ctx.beginPath();
+      ctx.arc(body.position.x, body.position.y, (body.circleRadius ?? 20) + 8, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(242,193,78,0.8)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    }
 
     if (tag.role === 'sensor') continue;
     const invalid = options.invalidIds?.has(tag.id);

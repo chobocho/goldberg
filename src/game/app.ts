@@ -1,5 +1,6 @@
 import type Matter from 'matter-js';
 import { FIELD, WORLD_HEIGHT, WORLD_WIDTH } from '../config';
+import { STEP_MS } from '../core/simulation';
 import { Editor } from '../editor/editor';
 import { PRACTICE } from '../levels/practice';
 import { PART_DEFS, type PartSpec, type PartType, type Vec } from '../parts/defs';
@@ -164,6 +165,27 @@ export class App {
     return bodies;
   }
 
+  private drawWinBanner(solvedAtStep: number): void {
+    const { ctx } = this;
+    const w = 320;
+    const h = 120;
+    const x = (FIELD.width - w) / 2;
+    const y = 40;
+    ctx.fillStyle = 'rgba(17,20,28,0.88)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = COLORS.gold;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = COLORS.gold;
+    ctx.font = 'bold 40px system-ui, sans-serif';
+    ctx.fillText('성공!', FIELD.width / 2, y + 45);
+    ctx.fillStyle = COLORS.text;
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillText(`${((solvedAtStep * STEP_MS) / 1000).toFixed(1)}초 만에 작동`, FIELD.width / 2, y + 90);
+  }
+
   private draw(): void {
     const { ctx, canvas } = this;
     const { dpr, scale, offsetX, offsetY } = this.viewport;
@@ -179,7 +201,8 @@ export class App {
     ctx.translate(FIELD.x, FIELD.y);
     drawFieldBackground(ctx);
     if (session.simulation) {
-      drawBodies(ctx, session.simulation.allBodies());
+      drawBodies(ctx, session.simulation.allBodies(), { achievedIds: session.simulation.achievedGoals });
+      if (session.result === 'won') this.drawWinBanner(session.simulation.solvedAtStep ?? 0);
     } else {
       const drag = editor.drag;
       drawBodies(ctx, this.previewBodies(editor.displayParts()), {

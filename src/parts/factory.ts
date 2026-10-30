@@ -72,7 +72,12 @@ export function createPart(spec: PartSpec): PartBodies {
     case 'domino':
       return {
         bodies: [
-          tagged(Bodies.rectangle(x, y, def.width, def.height, { angle, density: 0.002, friction: 0.5 }), spec, 'main'),
+          // 마찰이 크거나 모서리가 각지면 앞 도미노가 뒤 도미노에 기댄 채 멈춰 연쇄가 끊긴다
+          tagged(
+            Bodies.rectangle(x, y, def.width, def.height, { angle, density: 0.002, friction: 0.1, chamfer: { radius: 3 } }),
+            spec,
+            'main',
+          ),
         ],
         constraints: [],
       };
